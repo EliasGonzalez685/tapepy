@@ -1,0 +1,53 @@
+name: tapepy
+description: >
+  TapePy — plataforma de gestión para asociaciones de transporte
+  (alternativo y taxis). Traude es la primera organización/cliente
+  que corre sobre la plataforma.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # Backend / datos
+  supabase_flutter: ^2.5.0
+
+  # Notificaciones push
+  firebase_core: ^4.11.0
+  firebase_messaging: ^16.3.0
+
+  # Variables de entorno (URL/anon key de Supabase, sin hardcodear)
+  flutter_dotenv: ^5.1.0
+
+  # Carnet digital: PDF + QR
+  pdf: ^3.10.8
+  printing: ^5.12.0
+  qr_flutter: ^4.1.0
+
+  # Utilidades
+  intl: ^0.19.0
+  http: ^1.2.0
+  path_provider: ^2.1.2
+  image_picker: ^1.0.7      # subir fotos de documentos/cédulas
+  # Fijado en 10.3.10 a propósito: 11.0.0/11.0.1/11.0.2 tienen un bug
+  # conocido de compilación en Android (falta el plugin de Kotlin en su
+  # propio build.gradle — github.com/miguelpruivo/flutter_file_picker/issues/1973).
+  # No subir de versión sin confirmar antes que esté resuelto.
+  file_picker: 10.3.10
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/images/
+    - assets/icons/

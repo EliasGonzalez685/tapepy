@@ -1,0 +1,25 @@
+-- Bug encontrado probando el registro público: la pantalla de
+-- registro (sin sesión, rol `anon`) fallaba al cargar organizaciones
+-- con "permission denied for function auth_organizacion_id".
+--
+-- Causa: las políticas de select "para gente ya logueada" que ya
+-- existían (`organizaciones_select`, `org_isolation_select` en
+-- paradas) siguen aplicando a TODOS los roles (`{public}`, sin
+-- cláusula TO), y llaman a auth_organizacion_id()/
+-- auth_es_dueno_plataforma() — funciones a las que se le revocó
+-- EXECUTE para `anon` en la migración 0002 (endurecimiento pedido
+-- por el security advisor). Postgres necesita poder evaluar TODAS las
+-- políticas permisivas que apliquen al rol que consulta, así que
+-- aunque ya exista una política pública nueva (`organizaciones_select_publico`,
+-- `paradas_select_publico`) que por sí sola alcanzaría, el intento de
+-- evaluar también la política vieja dispara el error de permiso.
+--
+-- (Con `paradas` no se notaba porque su política pública es el
+-- literal `true`, que Postgres optimiza y elimina la otra rama antes
+-- de llegar a ejecutarla — comportamiento de optimización, no algo en
+-- lo que convenga confiar.)
+--
+-- Fix: acotar esas políticas viejas a `authenticated` explícitamente,
+-- para que ni se consideren cuando el rol que consulta es `anon`.
+alter policy organizaciones_select on organizaciones to authenticated;
+alter policy org_isolation_select on paradas to authenticated;

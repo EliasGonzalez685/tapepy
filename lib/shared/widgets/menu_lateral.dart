@@ -6,6 +6,10 @@ import '../../features/perfil/presentation/datos_personales_screen.dart';
 import '../../features/perfil/presentation/mi_qr_screen.dart';
 import '../../features/conductor/presentation/mi_constancia_screen.dart';
 import '../../features/mensajeria/presentation/mensajeria_screen.dart';
+import '../../features/ayuda/presentation/info_aplicacion_screen.dart';
+import '../../features/ayuda/presentation/comentarios_screen.dart';
+import '../../features/ayuda/presentation/condiciones_privacidad_screen.dart';
+import '../../features/ayuda/presentation/centro_ayuda_screen.dart';
 import '../models/user_role.dart';
 import '../models/usuario.dart';
 
@@ -181,6 +185,65 @@ class MenuLateral extends StatelessWidget {
                         );
                       },
                     ),
+                  const Divider(height: 24),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                    child: Text(
+                      'AYUDA Y COMENTARIOS',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  ItemMenuLateral(
+                    icono: Icons.info_outline,
+                    titulo: 'Info de la aplicación',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const InfoAplicacionScreen()),
+                      );
+                    },
+                  ),
+                  // Este ítem es para que un socio le escriba al dueño
+                  // de plataforma — no tiene sentido que el propio
+                  // dueño lo vea en su menú.
+                  if (usuario?.rol != UserRole.duenoPlataforma)
+                    ItemMenuLateral(
+                      icono: Icons.chat_bubble_outline,
+                      titulo: 'Comentarios para mejorar la app',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (usuario == null) return;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => ComentariosScreen(usuario: usuario!)),
+                        );
+                      },
+                    ),
+                  ItemMenuLateral(
+                    icono: Icons.gavel_outlined,
+                    titulo: 'Condiciones y Políticas de Privacidad',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const CondicionesPrivacidadScreen()),
+                      );
+                    },
+                  ),
+                  ItemMenuLateral(
+                    icono: Icons.support_agent_outlined,
+                    titulo: 'Centro de ayuda',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      if (usuario == null) return;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => CentroAyudaScreen(usuario: usuario!)),
+                      );
+                    },
+                  ),
                   if (itemsExtra.isNotEmpty) ...[
                     const Divider(height: 24),
                     ...itemsExtra,

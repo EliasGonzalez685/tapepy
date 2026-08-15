@@ -57,16 +57,7 @@ class ParadaResumen {
     return ParadaEstado.ok;
   }
 
-  String get subtitulo {
-    final activos = '$conductoresActivosCount/$conductoresCount activos';
-    if (cuotasAtrasadasCount > 0) {
-      return '$activos · $cuotasAtrasadasCount atrasados';
-    }
-    if (docsPorVencerCount > 0) {
-      return '$activos · $docsPorVencerCount docs vencen';
-    }
-    return '$activos · Todo en regla';
-  }
+  String get subtitulo => '$conductoresActivosCount/$conductoresCount activos';
 
   ParadaResumen copyWith({int? conductoresActivosCount}) {
     return ParadaResumen(

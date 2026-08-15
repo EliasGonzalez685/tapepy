@@ -6,6 +6,7 @@ import '../../../shared/utils/imprimir_documento.dart';
 import '../../../shared/widgets/badge_en_servicio.dart';
 import '../../../shared/models/user_role.dart';
 import '../../../shared/widgets/icon_badge.dart';
+import '../../../shared/widgets/vehiculos_conductor_sheet.dart';
 import '../data/lote_pago_service.dart';
 import '../data/parada_detalle_service.dart';
 import '../data/parada_resumen.dart';
@@ -294,7 +295,8 @@ class _ParadaDetalleScreenState extends State<ParadaDetalleScreen> {
                   'apaga su propia bandera de "en servicio". Acá solo consultás.',
             ),
             const SizedBox(height: 12),
-            _SeccionConductores(future: _conductoresFuture, onEliminar: _eliminarConductor),
+            _SeccionConductores(
+                future: _conductoresFuture, onEliminar: _eliminarConductor, service: _service),
           ],
         );
       case _Seccion.cuotas:
@@ -543,7 +545,13 @@ class _BarraSecciones extends StatelessWidget {
 class _SeccionConductores extends StatelessWidget {
   final Future<List<ConductorItem>> future;
   final void Function(ConductorItem) onEliminar;
-  const _SeccionConductores({super.key, required this.future, required this.onEliminar});
+  final ParadaDetalleService service;
+  const _SeccionConductores({
+    super.key,
+    required this.future,
+    required this.onEliminar,
+    required this.service,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -553,7 +561,15 @@ class _SeccionConductores extends StatelessWidget {
       vacioTexto: 'Todavía no hay conductores en esta parada',
       itemBuilder: (item) => Card(
         margin: const EdgeInsets.only(bottom: 10),
-        child: Padding(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => mostrarVehiculosConductorSheet(
+            context,
+            conductorId: item.id,
+            nombreConductor: item.nombre,
+            service: service,
+          ),
+          child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
@@ -603,6 +619,7 @@ class _SeccionConductores extends StatelessWidget {
                 onPressed: () => onEliminar(item),
               ),
             ],
+          ),
           ),
         ),
       ),

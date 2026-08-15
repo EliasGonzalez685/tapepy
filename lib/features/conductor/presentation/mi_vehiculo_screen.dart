@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/icon_badge.dart';
 import '../data/conductor_service.dart';
 
-/// Alta/edición del vehículo propio. El conductor es el único que carga
-/// estos datos — nadie más los completa por él. Las dos fotos (frente
-/// con chapa, y de lejos) son obligatorias, no un extra.
+/// Lista de vehículos del conductor — puede tener más de uno (ver
+/// [[project_traude_multivehiculo]]). Cada tarjeta tiene un switch para
+/// decidir si ese vehículo entra en los listados imprimibles; los
+/// presidentes también pueden alternar ese mismo switch desde su lado
+/// (RLS lo permite), así que acá se refleja el estado real cada vez que
+/// se refresca, no solo lo que el conductor haya tocado.
 class MiVehiculoScreen extends StatefulWidget {
   final ConductorPerfil perfil;
   const MiVehiculoScreen({super.key, required this.perfil});
@@ -16,19 +20,225 @@ class MiVehiculoScreen extends StatefulWidget {
 
 class _MiVehiculoScreenState extends State<MiVehiculoScreen> {
   final _service = ConductorService();
+  late Future<List<VehiculoInfo>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = Future.value(widget.perfil.vehiculos);
+  }
+
+  Future<void> _refrescar() async {
+    final perfil = await _service.cargarPerfil(widget.perfil.usuarioId);
+    setState(() => _future = Future.value(perfil?.vehiculos ?? []));
+  }
+
+  Future<void> _agregar() async {
+    final guardado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => _VehiculoFormScreen(perfil: widget.perfil, vehiculo: null)),
+    );
+    if (guardado == true) _refrescar();
+  }
+
+  Future<void> _editar(VehiculoInfo vehiculo) async {
+    final guardado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => _VehiculoFormScreen(perfil: widget.perfil, vehiculo: vehiculo)),
+    );
+    if (guardado == true) _refrescar();
+  }
+
+  Future<void> _alternarIncluirEnListado(VehiculoInfo vehiculo, bool valor) async {
+    if (vehiculo.id == null) return;
+    try {
+      await _service.alternarIncluirEnListado(vehiculoId: vehiculo.id!, valor: valor);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo actualizar. Intentá de nuevo.')));
+    } finally {
+      _refrescar();
+    }
+  }
+
+  Future<void> _eliminar(VehiculoInfo vehiculo) async {
+    if (vehiculo.id == null) return;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Eliminar vehículo?'),
+        content: Text(
+          'Se va a borrar ${[
+            vehiculo.marca,
+            vehiculo.modelo,
+          ].where((e) => e != null && e.isNotEmpty).join(' ').trim().isEmpty ? 'este vehículo' : '${vehiculo.marca ?? ''} ${vehiculo.modelo ?? ''}'.trim()} y sus fotos. No se puede deshacer.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Eliminar', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+    try {
+      await _service.eliminarVehiculo(
+        vehiculoId: vehiculo.id!,
+        fotoFrenteChapa: vehiculo.fotoFrenteChapa,
+        fotoLejos: vehiculo.fotoLejos,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vehículo eliminado')));
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo eliminar. Intentá de nuevo.')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mis vehículos')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _agregar,
+        backgroundColor: AppTheme.rojoInstitucional,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Agregar vehículo', style: TextStyle(color: Colors.white)),
+      ),
+      body: FutureBuilder<List<VehiculoInfo>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final vehiculos = snapshot.data ?? [];
+          if (vehiculos.isEmpty) {
+            return ListView(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80, horizontal: 24),
+                  child: Column(
+                    children: [
+                      Icon(Icons.directions_car_filled_outlined,
+                          size: 48, color: Theme.of(context).colorScheme.outline),
+                      const SizedBox(height: 12),
+                      const Text('Todavía no cargaste ningún vehículo', textAlign: TextAlign.center),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tocá "Agregar vehículo" para empezar. Podés cargar más de uno.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+            itemCount: vehiculos.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final vehiculo = vehiculos[index];
+              final titulo = [vehiculo.marca, vehiculo.modelo]
+                  .where((e) => e != null && e.isNotEmpty)
+                  .join(' ');
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          IconBadge(
+                            icono: Icons.directions_car_filled_outlined,
+                            color: AppTheme.rojoInstitucional,
+                            diametro: 44,
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(titulo.isEmpty ? 'Sin datos todavía' : titulo,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(fontWeight: FontWeight.w600)),
+                                if (vehiculo.chapa != null)
+                                  Text(vehiculo.chapa!,
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Editar',
+                            onPressed: () => _editar(vehiculo),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+                            tooltip: 'Eliminar',
+                            onPressed: () => _eliminar(vehiculo),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Incluir en listados impresos',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                          Switch(
+                            value: vehiculo.incluirEnListado,
+                            activeThumbColor: AppTheme.rojoInstitucional,
+                            onChanged: (valor) => _alternarIncluirEnListado(vehiculo, valor),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Alta/edición de un vehículo puntual. Las dos fotos (frente con
+/// chapa, y de lejos) son obligatorias, no un extra.
+class _VehiculoFormScreen extends StatefulWidget {
+  final ConductorPerfil perfil;
+  final VehiculoInfo? vehiculo; // null = alta de uno nuevo
+  const _VehiculoFormScreen({required this.perfil, required this.vehiculo});
+
+  @override
+  State<_VehiculoFormScreen> createState() => _VehiculoFormScreenState();
+}
+
+class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
+  final _service = ConductorService();
   final _formKey = GlobalKey<FormState>();
-  late final _marcaController =
-      TextEditingController(text: widget.perfil.vehiculo?.marca ?? '');
-  late final _modeloController =
-      TextEditingController(text: widget.perfil.vehiculo?.modelo ?? '');
-  late final _anioController =
-      TextEditingController(text: widget.perfil.vehiculo?.anio?.toString() ?? '');
-  late final _chapaController =
-      TextEditingController(text: widget.perfil.vehiculo?.chapa ?? '');
-  late final _colorController =
-      TextEditingController(text: widget.perfil.vehiculo?.color ?? '');
+  late final _marcaController = TextEditingController(text: widget.vehiculo?.marca ?? '');
+  late final _modeloController = TextEditingController(text: widget.vehiculo?.modelo ?? '');
+  late final _anioController = TextEditingController(text: widget.vehiculo?.anio?.toString() ?? '');
+  late final _chapaController = TextEditingController(text: widget.vehiculo?.chapa ?? '');
+  late final _colorController = TextEditingController(text: widget.vehiculo?.color ?? '');
   late final _resolucionController =
-      TextEditingController(text: widget.perfil.vehiculo?.resolucionNumero ?? '');
+      TextEditingController(text: widget.vehiculo?.resolucionNumero ?? '');
 
   bool _guardando = false;
   VehiculoFotoSlot? _subiendoSlot;
@@ -40,20 +250,20 @@ class _MiVehiculoScreenState extends State<MiVehiculoScreen> {
   @override
   void initState() {
     super.initState();
-    _fotoFrente = widget.perfil.vehiculo?.fotoFrenteChapa;
-    _fotoLejos = widget.perfil.vehiculo?.fotoLejos;
+    _fotoFrente = widget.vehiculo?.fotoFrenteChapa;
+    _fotoLejos = widget.vehiculo?.fotoLejos;
     _initFuture = _inicializar();
   }
 
-  /// Si todavía no existe la fila de vehículo, la crea vacía acá mismo
-  /// para tener un id y poder subir fotos aunque no se haya guardado
-  /// marca/modelo/etc. todavía.
+  /// Si es un vehículo nuevo, crea la fila vacía acá mismo para tener un
+  /// id y poder subir fotos aunque todavía no se haya guardado
+  /// marca/modelo/etc.
   Future<void> _inicializar() async {
-    if (widget.perfil.vehiculo?.id != null) {
-      _vehiculoId = widget.perfil.vehiculo!.id;
+    if (widget.vehiculo?.id != null) {
+      _vehiculoId = widget.vehiculo!.id;
       return;
     }
-    _vehiculoId = await _service.crearVehiculoVacio(
+    _vehiculoId = await _service.agregarVehiculo(
       conductorId: widget.perfil.conductorId,
       organizacionId: widget.perfil.organizacionId,
     );
@@ -88,7 +298,7 @@ class _MiVehiculoScreenState extends State<MiVehiculoScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Vehículo guardado')));
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -185,7 +395,7 @@ class _MiVehiculoScreenState extends State<MiVehiculoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi vehículo')),
+      appBar: AppBar(title: Text(widget.vehiculo == null ? 'Agregar vehículo' : 'Editar vehículo')),
       body: FutureBuilder<void>(
         future: _initFuture,
         builder: (context, snapshot) {

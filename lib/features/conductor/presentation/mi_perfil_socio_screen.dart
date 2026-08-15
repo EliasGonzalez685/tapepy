@@ -122,10 +122,8 @@ class _MiPerfilSocioScreenState extends State<MiPerfilSocioScreen> {
                   _AccesoCard(
                     icono: Icons.directions_car_filled_outlined,
                     color: AppTheme.rojoInstitucional,
-                    titulo: 'Mi vehículo',
-                    subtitulo: perfil.vehiculo == null || perfil.vehiculo!.estaVacio
-                        ? 'Todavía no cargaste los datos'
-                        : '${perfil.vehiculo!.marca ?? ''} ${perfil.vehiculo!.modelo ?? ''} · ${perfil.vehiculo!.chapa ?? ''}',
+                    titulo: 'Mis vehículos',
+                    subtitulo: perfil.resumenVehiculos,
                     onTap: () async {
                       await Navigator.of(context)
                           .push(MaterialPageRoute(builder: (_) => MiVehiculoScreen(perfil: perfil)));

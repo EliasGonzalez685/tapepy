@@ -99,6 +99,7 @@ class ParadaPresidenteService {
     required Uint8List bytes,
     required String extension,
     DateTime? fechaVencimiento,
+    String? descripcion,
   }) async {
     final nombreArchivo = '${tipo}_${DateTime.now().millisecondsSinceEpoch}.$extension';
     final path = '$organizacionId/paradas/$paradaId/$nombreArchivo';
@@ -119,6 +120,7 @@ class ParadaPresidenteService {
       'fecha_vencimiento':
           fechaVencimiento != null ? _formatoFecha(fechaVencimiento) : null,
       'estado': _estadoSegunVencimiento(fechaVencimiento),
+      'descripcion': descripcion,
     });
   }
 

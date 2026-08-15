@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/config/supabase_config.dart';
+import '../../conductor/data/conductor_service.dart' show VehiculoInfo;
 
 /// Modelos y servicio para la pantalla de detalle de una parada
 /// (rol presidente de asociación). Cada sección (conductores, cuotas,
@@ -45,13 +46,25 @@ class ConductorItem {
 
   factory ConductorItem.fromMap(Map<String, dynamic> map) {
     final usuario = map['usuarios'] as Map<String, dynamic>?;
-    final vehiculo = map['vehiculos'] as Map<String, dynamic>?;
+    // Postgrest devuelve `vehiculos` como lista (un conductor puede
+    // tener más de uno) — acá es solo un resumen rápido en pantalla,
+    // no el listado imprimible, así que mostramos el primero y, si hay
+    // más, lo indicamos sin desglosar todos.
+    final vehiculosRaw = map['vehiculos'];
+    final vehiculos =
+        (vehiculosRaw is List ? vehiculosRaw : <dynamic>[]).cast<Map<String, dynamic>>();
+    final vehiculo = vehiculos.isNotEmpty ? vehiculos.first : null;
     String? vehiculoDesc;
     if (vehiculo != null) {
       final marca = vehiculo['marca'] as String?;
       final modelo = vehiculo['modelo'] as String?;
       vehiculoDesc = [marca, modelo].where((e) => e != null && e.isNotEmpty).join(' ');
       if (vehiculoDesc.isEmpty) vehiculoDesc = null;
+      if (vehiculos.length > 1) {
+        vehiculoDesc = vehiculoDesc == null
+            ? '${vehiculos.length} vehículos'
+            : '$vehiculoDesc (+${vehiculos.length - 1})';
+      }
     }
     return ConductorItem(
       id: map['id'] as String,
@@ -154,6 +167,7 @@ class DocumentoItem {
   final DateTime? fechaVencimiento;
   final String archivoUrl;
   final String? nombreArchivo;
+  final String? descripcion;
 
   DocumentoItem({
     required this.id,
@@ -163,6 +177,7 @@ class DocumentoItem {
     required this.archivoUrl,
     this.fechaVencimiento,
     this.nombreArchivo,
+    this.descripcion,
   });
 }
 
@@ -224,24 +239,59 @@ class ConductorListadoItem {
     this.resolucionNumero,
   });
 
-  factory ConductorListadoItem.fromMap(Map<String, dynamic> map) {
+  /// Un conductor puede tener más de un vehículo (ver
+  /// [[project_traude_multivehiculo]]) y cada uno decide si entra en
+  /// los listados impresos (`incluir_en_listado`). Por eso una sola
+  /// fila de `conductores` puede volverse 0, 1 o varias filas de
+  /// listado — una por cada vehículo habilitado, repitiendo los datos
+  /// de la persona. Si no tiene ningún vehículo habilitado (o
+  /// directamente no cargó ninguno), sale una sola fila sin datos de
+  /// vehículo, igual que antes de que existiera esta función.
+  static List<ConductorListadoItem> listaDesdeFila(Map<String, dynamic> map) {
     final usuario = map['usuarios'] as Map<String, dynamic>?;
-    final vehiculo = map['vehiculos'] as Map<String, dynamic>?;
     final parada = map['paradas'] as Map<String, dynamic>?;
-    return ConductorListadoItem(
-      nombre: usuario?['nombre'] as String? ?? 'Sin nombre',
-      cedula: usuario?['cedula'] as String?,
-      telefono: usuario?['telefono'] as String?,
-      paradaId: parada?['id'] as String?,
-      paradaNombre: parada?['nombre'] as String?,
-      turno: map['turno'] as String?,
-      chapa: vehiculo?['chapa'] as String?,
-      marca: vehiculo?['marca'] as String?,
-      modelo: vehiculo?['modelo'] as String?,
-      anio: (vehiculo?['anio'] as num?)?.toInt(),
-      color: vehiculo?['color'] as String?,
-      resolucionNumero: vehiculo?['resolucion_numero'] as String?,
-    );
+    final vehiculosRaw = map['vehiculos'];
+    final vehiculos = (vehiculosRaw is List ? vehiculosRaw : <dynamic>[])
+        .cast<Map<String, dynamic>>()
+        .where((v) => v['incluir_en_listado'] != false)
+        .toList();
+
+    final nombre = usuario?['nombre'] as String? ?? 'Sin nombre';
+    final cedula = usuario?['cedula'] as String?;
+    final telefono = usuario?['telefono'] as String?;
+    final paradaId = parada?['id'] as String?;
+    final paradaNombre = parada?['nombre'] as String?;
+    final turno = map['turno'] as String?;
+
+    if (vehiculos.isEmpty) {
+      return [
+        ConductorListadoItem(
+          nombre: nombre,
+          cedula: cedula,
+          telefono: telefono,
+          paradaId: paradaId,
+          paradaNombre: paradaNombre,
+          turno: turno,
+        ),
+      ];
+    }
+
+    return vehiculos
+        .map((vehiculo) => ConductorListadoItem(
+              nombre: nombre,
+              cedula: cedula,
+              telefono: telefono,
+              paradaId: paradaId,
+              paradaNombre: paradaNombre,
+              turno: turno,
+              chapa: vehiculo['chapa'] as String?,
+              marca: vehiculo['marca'] as String?,
+              modelo: vehiculo['modelo'] as String?,
+              anio: (vehiculo['anio'] as num?)?.toInt(),
+              color: vehiculo['color'] as String?,
+              resolucionNumero: vehiculo['resolucion_numero'] as String?,
+            ))
+        .toList();
   }
 }
 
@@ -254,10 +304,10 @@ class ParadaDetalleService {
     final rows = await _client
         .from('conductores')
         .select(
-            'turno, usuarios(nombre, cedula, telefono), vehiculos(marca, modelo, anio, color, chapa, resolucion_numero)')
+            'turno, usuarios(nombre, cedula, telefono), vehiculos(marca, modelo, anio, color, chapa, resolucion_numero, incluir_en_listado)')
         .eq('parada_id', paradaId);
     final items = (rows as List)
-        .map((r) => ConductorListadoItem.fromMap(r as Map<String, dynamic>))
+        .expand((r) => ConductorListadoItem.listaDesdeFila(r as Map<String, dynamic>))
         .toList();
     items.sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
     return items;
@@ -272,13 +322,13 @@ class ParadaDetalleService {
     String? organizacionId,
   }) async {
     var query = _client.from('conductores').select(
-        'turno, paradas(id, nombre), usuarios(nombre, cedula, telefono), vehiculos(marca, modelo, anio, color, chapa, resolucion_numero)');
+        'turno, paradas(id, nombre), usuarios(nombre, cedula, telefono), vehiculos(marca, modelo, anio, color, chapa, resolucion_numero, incluir_en_listado)');
     if (organizacionId != null) {
       query = query.eq('organizacion_id', organizacionId);
     }
     final rows = await query;
     final items = (rows as List)
-        .map((r) => ConductorListadoItem.fromMap(r as Map<String, dynamic>))
+        .expand((r) => ConductorListadoItem.listaDesdeFila(r as Map<String, dynamic>))
         .toList();
     items.sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
     return items;
@@ -291,6 +341,27 @@ class ParadaDetalleService {
         .eq('id', paradaId)
         .single();
     return row;
+  }
+
+  /// Vehículos de un conductor puntual — para que el presidente (de
+  /// parada o de asociación) pueda ver el detalle y alternar cuáles
+  /// entran en los listados impresos. La RLS de `vehiculos` ya permite
+  /// que ambos presidentes hagan ese UPDATE puntual (ver migración
+  /// 0029); todo lo demás del vehículo queda blindado por el trigger.
+  Future<List<VehiculoInfo>> cargarVehiculosDeConductor(String conductorId) async {
+    final rows = await _client
+        .from('vehiculos')
+        .select(
+            'id, marca, modelo, anio, chapa, color, resolucion_numero, foto_frente_chapa, foto_lejos, incluir_en_listado')
+        .eq('conductor_id', conductorId);
+    return (rows as List).map((r) => VehiculoInfo.fromMap(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> alternarVehiculoEnListado({
+    required String vehiculoId,
+    required bool valor,
+  }) async {
+    await _client.from('vehiculos').update({'incluir_en_listado': valor}).eq('id', vehiculoId);
   }
 
   Future<List<ConductorItem>> cargarConductores(String paradaId) async {
@@ -447,12 +518,12 @@ class ParadaDetalleService {
     final docsConductor = await _client
         .from('documentos_conductor')
         .select(
-            'id, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo, conductores!inner(parada_id, usuarios(nombre))')
+            'id, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo, descripcion, conductores!inner(parada_id, usuarios(nombre))')
         .eq('conductores.parada_id', paradaId);
 
     final docsParada = await _client
         .from('documentos_parada')
-        .select('id, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo')
+        .select('id, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo, descripcion')
         .eq('parada_id', paradaId);
 
     final resultado = <DocumentoItem>[];
@@ -468,6 +539,7 @@ class ParadaDetalleService {
         estado: map['estado'] as String,
         archivoUrl: map['archivo_url'] as String,
         nombreArchivo: map['nombre_archivo'] as String?,
+        descripcion: map['descripcion'] as String?,
         fechaVencimiento: map['fecha_vencimiento'] != null
             ? DateTime.parse(map['fecha_vencimiento'] as String)
             : null,
@@ -483,6 +555,7 @@ class ParadaDetalleService {
         estado: map['estado'] as String,
         archivoUrl: map['archivo_url'] as String,
         nombreArchivo: map['nombre_archivo'] as String?,
+        descripcion: map['descripcion'] as String?,
         fechaVencimiento: map['fecha_vencimiento'] != null
             ? DateTime.parse(map['fecha_vencimiento'] as String)
             : null,

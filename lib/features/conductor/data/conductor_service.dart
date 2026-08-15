@@ -45,6 +45,11 @@ class VehiculoInfo {
   final String? resolucionNumero;
   final String? fotoFrenteChapa;
   final String? fotoLejos;
+  // Si este vehículo entra o no en los listados imprimibles — un
+  // conductor puede tener más de un vehículo habilitado (o ninguno) a
+  // la vez; lo alterna el propio conductor o cualquiera de sus dos
+  // presidentes (ver migración 0029 y su trigger de blindaje).
+  final bool incluirEnListado;
 
   VehiculoInfo({
     this.id,
@@ -56,9 +61,25 @@ class VehiculoInfo {
     this.resolucionNumero,
     this.fotoFrenteChapa,
     this.fotoLejos,
+    this.incluirEnListado = true,
   });
 
   bool get estaVacio => marca == null && modelo == null && chapa == null;
+
+  VehiculoInfo copyWith({bool? incluirEnListado}) {
+    return VehiculoInfo(
+      id: id,
+      marca: marca,
+      modelo: modelo,
+      anio: anio,
+      chapa: chapa,
+      color: color,
+      resolucionNumero: resolucionNumero,
+      fotoFrenteChapa: fotoFrenteChapa,
+      fotoLejos: fotoLejos,
+      incluirEnListado: incluirEnListado ?? this.incluirEnListado,
+    );
+  }
 
   factory VehiculoInfo.fromMap(Map<String, dynamic> map) {
     return VehiculoInfo(
@@ -71,6 +92,7 @@ class VehiculoInfo {
       resolucionNumero: map['resolucion_numero'] as String?,
       fotoFrenteChapa: map['foto_frente_chapa'] as String?,
       fotoLejos: map['foto_lejos'] as String?,
+      incluirEnListado: map['incluir_en_listado'] as bool? ?? true,
     );
   }
 }
@@ -82,7 +104,10 @@ class ConductorPerfil {
   final String? turno;
   final String paradaId;
   final String paradaNombre;
-  final VehiculoInfo? vehiculo;
+  // Un conductor (o presidente que también es socio) puede tener más
+  // de un vehículo — ver [[project_traude_multivehiculo]]. Lista vacía
+  // = todavía no cargó ninguno.
+  final List<VehiculoInfo> vehiculos;
 
   ConductorPerfil({
     required this.conductorId,
@@ -91,8 +116,20 @@ class ConductorPerfil {
     required this.paradaId,
     required this.paradaNombre,
     this.turno,
-    this.vehiculo,
+    this.vehiculos = const [],
   });
+
+  /// Texto corto para la tarjeta "Mi vehículo"/"Mis vehículos" en las
+  /// pantallas de acceso rápido — resume sin listar todo.
+  String get resumenVehiculos {
+    final cargados = vehiculos.where((v) => !v.estaVacio).toList();
+    if (cargados.isEmpty) return 'Todavía no cargaste los datos';
+    if (cargados.length == 1) {
+      final v = cargados.first;
+      return '${v.marca ?? ''} ${v.modelo ?? ''} · ${v.chapa ?? ''}';
+    }
+    return '${cargados.length} vehículos registrados';
+  }
 }
 
 class DocumentoConductorItem {
@@ -103,6 +140,9 @@ class DocumentoConductorItem {
   final DateTime? fechaVencimiento;
   final String archivoUrl;
   final String? nombreArchivo;
+  // Texto libre para documentos que no entran en la lista fija de
+  // tipos (tipo == 'otro') — así queda claro qué es sin adivinar.
+  final String? descripcion;
 
   DocumentoConductorItem({
     required this.id,
@@ -112,6 +152,7 @@ class DocumentoConductorItem {
     required this.archivoUrl,
     this.fechaVencimiento,
     this.nombreArchivo,
+    this.descripcion,
   });
 
   factory DocumentoConductorItem.fromMap(Map<String, dynamic> map) {
@@ -122,6 +163,7 @@ class DocumentoConductorItem {
       estado: map['estado'] as String,
       archivoUrl: map['archivo_url'] as String,
       nombreArchivo: map['nombre_archivo'] as String?,
+      descripcion: map['descripcion'] as String?,
       fechaVencimiento: map['fecha_vencimiento'] != null
           ? DateTime.parse(map['fecha_vencimiento'] as String)
           : null,
@@ -195,7 +237,7 @@ class ConductorService {
     final rows = await _client
         .from('conductores')
         .select(
-            'id, organizacion_id, turno, parada_id, paradas(nombre), vehiculos(id, marca, modelo, anio, chapa, color, resolucion_numero, foto_frente_chapa, foto_lejos)')
+            'id, organizacion_id, turno, parada_id, paradas(nombre), vehiculos(id, marca, modelo, anio, chapa, color, resolucion_numero, foto_frente_chapa, foto_lejos, incluir_en_listado)')
         .eq('usuario_id', usuarioId)
         .limit(1);
 
@@ -204,7 +246,12 @@ class ConductorService {
     final row = lista.first as Map<String, dynamic>;
 
     final parada = row['paradas'] as Map<String, dynamic>?;
-    final vehiculoMap = row['vehiculos'] as Map<String, dynamic>?;
+    // Postgrest devuelve `vehiculos` como lista ahora que un conductor
+    // puede tener más de uno (el FK conductor_id ya no es UNIQUE).
+    final vehiculosRaw = row['vehiculos'];
+    final vehiculos = (vehiculosRaw is List ? vehiculosRaw : <dynamic>[])
+        .map((v) => VehiculoInfo.fromMap(v as Map<String, dynamic>))
+        .toList();
 
     return ConductorPerfil(
       conductorId: row['id'] as String,
@@ -213,7 +260,7 @@ class ConductorService {
       turno: row['turno'] as String?,
       paradaId: row['parada_id'] as String,
       paradaNombre: parada?['nombre'] as String? ?? 'Sin asignar',
-      vehiculo: vehiculoMap != null ? VehiculoInfo.fromMap(vehiculoMap) : null,
+      vehiculos: vehiculos,
     );
   }
 
@@ -236,10 +283,12 @@ class ConductorService {
     });
   }
 
-  /// Crea la fila de vehículo vacía la primera vez que el conductor entra
-  /// a "Mi vehículo" (así ya hay un id para poder subir fotos aunque
-  /// todavía no haya cargado marca/modelo/etc.).
-  Future<String> crearVehiculoVacio({
+  /// Crea una fila de vehículo vacía — la primera vez que el conductor
+  /// entra a "Mis vehículos" (para tener un id y poder subir fotos
+  /// aunque todavía no haya cargado marca/modelo/etc.) o cada vez que
+  /// agrega uno adicional. Un conductor puede tener más de un vehículo
+  /// (ver [[project_traude_multivehiculo]]).
+  Future<String> agregarVehiculo({
     required String conductorId,
     required String organizacionId,
   }) async {
@@ -270,10 +319,42 @@ class ConductorService {
     }).eq('id', vehiculoId);
   }
 
+  /// Si este vehículo entra o no en los próximos listados imprimibles.
+  /// Lo puede tocar el propio conductor o cualquiera de sus dos
+  /// presidentes (RLS + trigger de blindaje, ver migración 0029) — es
+  /// la única columna que un presidente puede cambiar acá.
+  Future<void> alternarIncluirEnListado({
+    required String vehiculoId,
+    required bool valor,
+  }) async {
+    await _client.from('vehiculos').update({'incluir_en_listado': valor}).eq('id', vehiculoId);
+  }
+
+  /// Elimina el vehículo por completo (y sus fotos del storage, si
+  /// tenía). Solo el propio conductor puede hacerlo (RLS).
+  Future<void> eliminarVehiculo({
+    required String vehiculoId,
+    String? fotoFrenteChapa,
+    String? fotoLejos,
+  }) async {
+    await _client.from('vehiculos').delete().eq('id', vehiculoId);
+    final paths = [fotoFrenteChapa, fotoLejos].whereType<String>().toList();
+    if (paths.isNotEmpty) {
+      try {
+        await _client.storage.from(_bucket).remove(paths);
+      } catch (_) {
+        // La fila ya se borró; si falla la limpieza de storage no es
+        // motivo para que la operación completa se vea como un error.
+      }
+    }
+  }
+
   /// Sube una de las dos fotos fijas del vehículo (frente con chapa
-  /// visible, o de lejos completo) al bucket privado de documentos.
-  /// Cada slot siempre usa el mismo nombre de archivo (se reemplaza si
-  /// ya existía una foto ahí).
+  /// visible, o de lejos completo) al bucket privado de documentos, en
+  /// una carpeta propia por vehículo (para no pisar la foto de otro
+  /// vehículo del mismo conductor). Cada slot siempre usa el mismo
+  /// nombre de archivo dentro de esa carpeta (se reemplaza si ya
+  /// existía una foto ahí).
   Future<String> subirFotoVehiculo({
     required String organizacionId,
     required String usuarioId,
@@ -282,7 +363,7 @@ class ConductorService {
     required Uint8List bytes,
     required String extension,
   }) async {
-    final path = '$organizacionId/$usuarioId/vehiculo_${slot.nombreArchivo}.$extension';
+    final path = '$organizacionId/$usuarioId/$vehiculoId/vehiculo_${slot.nombreArchivo}.$extension';
 
     await _client.storage.from(_bucket).uploadBinary(
           path,
@@ -313,7 +394,7 @@ class ConductorService {
   Future<List<DocumentoConductorItem>> cargarDocumentos(String conductorId) async {
     final rows = await _client
         .from('documentos_conductor')
-        .select('id, categoria, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo')
+        .select('id, categoria, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo, descripcion')
         .eq('conductor_id', conductorId)
         .order('subido_en', ascending: false);
     return (rows as List)
@@ -336,6 +417,7 @@ class ConductorService {
     required Uint8List bytes,
     required String extension,
     DateTime? fechaVencimiento,
+    String? descripcion,
   }) async {
     final nombreArchivo = '${tipo}_${DateTime.now().millisecondsSinceEpoch}.$extension';
     final path = '$organizacionId/$usuarioId/$nombreArchivo';
@@ -358,6 +440,7 @@ class ConductorService {
       'fecha_vencimiento':
           fechaVencimiento != null ? _formatoFecha(fechaVencimiento) : null,
       'estado': estado,
+      'descripcion': descripcion,
     });
   }
 

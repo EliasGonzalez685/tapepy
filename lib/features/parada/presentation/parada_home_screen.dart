@@ -10,6 +10,7 @@ import '../../../shared/widgets/badge_en_servicio.dart';
 import '../../../shared/widgets/en_servicio_switch.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../../../shared/widgets/menu_lateral.dart';
+import '../../../shared/widgets/vehiculos_conductor_sheet.dart';
 import '../../asociacion/data/parada_detalle_service.dart';
 import '../../asociacion/data/parada_resumen.dart';
 import '../../asociacion/presentation/balance_pagos_screen.dart';
@@ -558,7 +559,8 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
                   'apaga su propia bandera de "en servicio". Acá solo consultás.',
             ),
             const SizedBox(height: 12),
-            _ListaConductores(future: _conductoresFuture!, onEliminar: _eliminarConductor),
+            _ListaConductores(
+                future: _conductoresFuture!, onEliminar: _eliminarConductor, service: _detalleService),
           ],
         );
       case _Seccion.cuotas:
@@ -944,11 +946,26 @@ class _BarraSecciones extends StatelessWidget {
 class _ListaConductores extends StatelessWidget {
   final Future<List<ConductorItem>> future;
   final void Function(ConductorItem) onEliminar;
-  const _ListaConductores({super.key, required this.future, required this.onEliminar});
+  final ParadaDetalleService service;
+  const _ListaConductores({
+    super.key,
+    required this.future,
+    required this.onEliminar,
+    required this.service,
+  });
 
   static String _turnoLabel(String turno) {
     const labels = {'manana': 'Mañana', 'tarde': 'Tarde', 'noche': 'Noche', 'completo': 'Completo'};
     return labels[turno] ?? turno;
+  }
+
+  void _abrirVehiculos(BuildContext context, ConductorItem item) {
+    mostrarVehiculosConductorSheet(
+      context,
+      conductorId: item.id,
+      nombreConductor: item.nombre,
+      service: service,
+    );
   }
 
   @override
@@ -959,7 +976,10 @@ class _ListaConductores extends StatelessWidget {
       vacioTexto: 'Todavía no hay conductores en esta parada',
       itemBuilder: (item) => Card(
         margin: const EdgeInsets.only(bottom: 10),
-        child: Padding(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _abrirVehiculos(context, item),
+          child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
@@ -1006,6 +1026,7 @@ class _ListaConductores extends StatelessWidget {
                 onPressed: () => onEliminar(item),
               ),
             ],
+          ),
           ),
         ),
       ),
@@ -1152,6 +1173,7 @@ class _ListaDocumentos extends StatelessWidget {
       vacioTexto: 'No hay documentos por revisar en esta parada',
       itemBuilder: (item) {
         final color = _colorEstado(item.estado);
+        final tieneDescripcion = item.descripcion != null && item.descripcion!.isNotEmpty;
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: InkWell(
@@ -1172,8 +1194,17 @@ class _ListaDocumentos extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${item.entidad} · ${_labelTipo(item.tipo)}',
+                      Text(
+                          tieneDescripcion
+                              ? '${item.entidad} · ${item.descripcion}'
+                              : '${item.entidad} · ${_labelTipo(item.tipo)}',
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                      if (tieneDescripcion)
+                        Text(_labelTipo(item.tipo),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       if (item.fechaVencimiento != null) ...[
                         const SizedBox(height: 2),
                         Text(
@@ -1421,6 +1452,15 @@ class _FormularioDocumentoParadaState extends State<_FormularioDocumentoParada> 
   DateTime? _vencimiento;
   XFile? _archivo;
   bool _subiendo = false;
+  final _descripcionController = TextEditingController();
+
+  bool get _esOtro => _tipo == 'otro';
+
+  @override
+  void dispose() {
+    _descripcionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _elegirArchivo() async {
     final origen = await showModalBottomSheet<ImageSource>(
@@ -1464,6 +1504,11 @@ class _FormularioDocumentoParadaState extends State<_FormularioDocumentoParada> 
           .showSnackBar(const SnackBar(content: Text('Elegí una foto del documento')));
       return;
     }
+    if (_esOtro && _descripcionController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Contá qué documento es')));
+      return;
+    }
     setState(() => _subiendo = true);
     try {
       final bytes = await _archivo!.readAsBytes();
@@ -1476,6 +1521,8 @@ class _FormularioDocumentoParadaState extends State<_FormularioDocumentoParada> 
         bytes: bytes,
         extension: extension,
         fechaVencimiento: _vencimiento,
+        descripcion:
+            _descripcionController.text.trim().isEmpty ? null : _descripcionController.text.trim(),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -1513,6 +1560,17 @@ class _FormularioDocumentoParadaState extends State<_FormularioDocumentoParada> 
                 .toList(),
             onChanged: (value) => setState(() => _tipo = value ?? _tipo),
           ),
+          if (_esOtro) ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _descripcionController,
+              decoration: const InputDecoration(
+                labelText: 'Qué documento es',
+                hintText: 'Ej: Nota del municipio, plano de la parada',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: _elegirArchivo,

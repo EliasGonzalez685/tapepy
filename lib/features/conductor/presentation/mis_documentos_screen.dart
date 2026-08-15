@@ -127,6 +127,7 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
               final doc = docs[index];
               final color = _colorEstado(doc.estado);
               final etiquetaTipo = _tiposDocumento[doc.tipo]?.$1 ?? doc.tipo;
+              final tieneDescripcion = doc.descripcion != null && doc.descripcion!.isNotEmpty;
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -138,11 +139,15 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(etiquetaTipo,
+                            Text(tieneDescripcion ? doc.descripcion! : etiquetaTipo,
                                 style: Theme.of(context)
                                     .textTheme
                                     .titleSmall
                                     ?.copyWith(fontWeight: FontWeight.w600)),
+                            if (tieneDescripcion)
+                              Text(etiquetaTipo,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
                             if (doc.fechaVencimiento != null)
                               Text('Vence ${formatoFecha.format(doc.fechaVencimiento!)}',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -190,6 +195,15 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
   DateTime? _vencimiento;
   XFile? _archivo;
   bool _subiendo = false;
+  final _descripcionController = TextEditingController();
+
+  bool get _esOtro => _tipo == 'otro';
+
+  @override
+  void dispose() {
+    _descripcionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _elegirArchivo() async {
     final origen = await showModalBottomSheet<ImageSource>(
@@ -234,6 +248,11 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
           .showSnackBar(const SnackBar(content: Text('Elegí una foto del documento')));
       return;
     }
+    if (_esOtro && _descripcionController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Contá qué documento es')));
+      return;
+    }
     setState(() => _subiendo = true);
     try {
       final bytes = await _archivo!.readAsBytes();
@@ -249,6 +268,8 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
         bytes: bytes,
         extension: extension,
         fechaVencimiento: _vencimiento,
+        descripcion:
+            _descripcionController.text.trim().isEmpty ? null : _descripcionController.text.trim(),
       );
 
       if (!mounted) return;
@@ -286,6 +307,17 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
                 .toList(),
             onChanged: (value) => setState(() => _tipo = value ?? _tipo),
           ),
+          if (_esOtro) ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _descripcionController,
+              decoration: const InputDecoration(
+                labelText: 'Qué documento es',
+                hintText: 'Ej: Carta de recomendación, comprobante de domicilio',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: _elegirArchivo,

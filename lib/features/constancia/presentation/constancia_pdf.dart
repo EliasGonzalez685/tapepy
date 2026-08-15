@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import '../../../shared/utils/firma_cargo.dart';
 import '../../../shared/utils/numero_en_palabras.dart';
 import '../data/constancia_service.dart';
 
@@ -24,10 +25,22 @@ const _meses = [
 
 /// Constancia formal: mismo membrete que el listado de socios y el
 /// balance de pagos, pero el cuerpo es un párrafo de texto (no una
-/// tabla) — y deja un espacio en blanco al final para la firma y sello
-/// del presidente de asociación, porque el PDF sale del sistema sin
-/// firma digital todavía.
-Future<Uint8List> construirPdfConstancia(ConstanciaParaImprimir datos) async {
+/// tabla) — y deja uno o dos bloques de firma al final (presidente de
+/// asociación y/o de parada, según lo que haya elegido quien imprime).
+/// Cada bloque lleva el cargo formateado (ver [cargoPresidenteAsociacion]
+/// y [cargoPresidenteParada]) y el nombre de la persona debajo; la
+/// imagen de la firma solo aparece si esa autoridad ya subió su firma
+/// digital y fue incluida — si no, queda la línea en blanco para firmar
+/// a mano.
+Future<Uint8List> construirPdfConstancia(
+  ConstanciaParaImprimir datos, {
+  bool incluirAsociacion = true,
+  Uint8List? firmaAsociacionBytes,
+  String? nombreAsociacion,
+  bool incluirParada = false,
+  Uint8List? firmaParadaBytes,
+  String? nombreParada,
+}) async {
   final doc = pw.Document();
   final rojo = PdfColor.fromHex('#CC0000');
   final azul = PdfColor.fromHex('#1B3A8C');
@@ -93,6 +106,36 @@ Future<Uint8List> construirPdfConstancia(ConstanciaParaImprimir datos) async {
       'Se expide la presente constancia a pedido del interesado, para los fines que estime conveniente, '
       '$diaTexto del mes de $mesTexto del año $anioTexto.';
 
+  pw.Widget bloqueFirma(String cargo, String? nombre, Uint8List? bytes) => pw.Column(
+        children: [
+          if (bytes != null)
+            pw.Container(
+              height: 45,
+              width: 150,
+              alignment: pw.Alignment.bottomCenter,
+              child: pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain),
+            )
+          else
+            const pw.SizedBox(height: 45),
+          pw.Container(width: 150, height: 0.8, color: PdfColors.grey700),
+          pw.SizedBox(height: 4),
+          pw.Text(cargo,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+          if (nombre != null && nombre.isNotEmpty) ...[
+            pw.SizedBox(height: 2),
+            pw.Text(nombre,
+                textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+          ],
+        ],
+      );
+
+  final bloquesFirma = <pw.Widget>[
+    if (incluirAsociacion)
+      bloqueFirma(cargoPresidenteAsociacion(datos.organizacionNombre), nombreAsociacion, firmaAsociacionBytes),
+    if (incluirParada) bloqueFirma(cargoPresidenteParada(datos.paradaNombre), nombreParada, firmaParadaBytes),
+  ];
+
   doc.addPage(
     pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -105,16 +148,8 @@ Future<Uint8List> construirPdfConstancia(ConstanciaParaImprimir datos) async {
           pw.SizedBox(height: 14),
           pw.Text(parrafo2, style: const pw.TextStyle(fontSize: 12), textAlign: pw.TextAlign.justify),
           pw.SizedBox(height: 60),
-          pw.Center(
-            child: pw.Column(
-              children: [
-                pw.Container(width: 200, height: 0.8, color: PdfColors.grey700),
-                pw.SizedBox(height: 4),
-                pw.Text('Firma y sello del Presidente de Asociación',
-                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-              ],
-            ),
-          ),
+          if (bloquesFirma.isNotEmpty)
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly, children: bloquesFirma),
         ],
       ),
     ),

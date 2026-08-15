@@ -70,7 +70,8 @@ class _ConductorHomeScreenState extends State<ConductorHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_organizacionNombre ?? 'TapePy')),
+      appBar: AppBar(
+          title: Text(_organizacionNombre ?? 'TapePy', overflow: TextOverflow.ellipsis, maxLines: 1)),
       drawer: MenuLateral(
         usuario: widget.usuario,
         noLeidosFuture: _noLeidosFuture,
@@ -164,37 +165,49 @@ class _SaludoConductor extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: Colors.white,
-            backgroundImage: usuario?.fotoPerfilUrl != null ? NetworkImage(usuario!.fotoPerfilUrl!) : null,
-            child: usuario?.fotoPerfilUrl == null
-                ? Text(inicial,
-                    style: const TextStyle(
-                        color: AppTheme.rojoInstitucional, fontWeight: FontWeight.bold, fontSize: 20))
-                : null,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$_saludo, $nombre',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text(
-                  parada != null ? 'Conductor · $parada' : 'Conductor',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: Colors.white,
+                backgroundImage:
+                    usuario?.fotoPerfilUrl != null ? NetworkImage(usuario!.fotoPerfilUrl!) : null,
+                child: usuario?.fotoPerfilUrl == null
+                    ? Text(inicial,
+                        style: const TextStyle(
+                            color: AppTheme.rojoInstitucional, fontWeight: FontWeight.bold, fontSize: 20))
+                    : null,
+              ),
+              const SizedBox(width: 14),
+              // Expanded + Column propio (no comparte fila con el
+              // switch de "en servicio"): en un celular real, todo
+              // junto en un Row deja muy poco ancho para el nombre.
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$_saludo, $nombre',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(
+                      parada != null ? 'Conductor · $parada' : 'Conductor',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           if (usuario != null) ...[
-            const SizedBox(width: 8),
-            EnServicioSwitch(usuarioId: usuario!.id, valorInicial: usuario!.enServicio),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: EnServicioSwitch(usuarioId: usuario!.id, valorInicial: usuario!.enServicio),
+            ),
           ],
         ],
       ),

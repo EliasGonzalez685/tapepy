@@ -270,15 +270,23 @@ class _CaraFrente extends StatelessWidget {
       child: Column(
         children: [
           const _EncabezadoOrganizacion(),
-          const SizedBox(height: 14),
-          CircleAvatar(
-            radius: 44,
-            backgroundColor: AppTheme.rojoInstitucional.withValues(alpha: 0.15),
-            backgroundImage: datos.fotoPerfilUrl != null ? NetworkImage(datos.fotoPerfilUrl!) : null,
+          const SizedBox(height: 12),
+          Container(
+            width: 140,
+            height: 140,
+            decoration: BoxDecoration(
+              color: AppTheme.rojoInstitucional.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.rojoInstitucional.withValues(alpha: 0.25), width: 1.5),
+              image: datos.fotoPerfilUrl != null
+                  ? DecorationImage(image: NetworkImage(datos.fotoPerfilUrl!), fit: BoxFit.cover)
+                  : null,
+            ),
+            alignment: Alignment.center,
             child: datos.fotoPerfilUrl == null
                 ? Text(inicial,
                     style: const TextStyle(
-                        color: AppTheme.rojoInstitucional, fontSize: 32, fontWeight: FontWeight.bold))
+                        color: AppTheme.rojoInstitucional, fontSize: 46, fontWeight: FontWeight.bold))
                 : null,
           ),
           const SizedBox(height: 10),
@@ -497,20 +505,20 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
     pw.Column(
       children: [
         encabezado(),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 8),
         pw.ClipRRect(
-          horizontalRadius: 35,
-          verticalRadius: 35,
+          horizontalRadius: 8,
+          verticalRadius: 8,
           child: fotoImage != null
-              ? pw.Image(fotoImage, width: 70, height: 70, fit: pw.BoxFit.cover)
+              ? pw.Image(fotoImage, width: 92, height: 92, fit: pw.BoxFit.cover)
               : pw.Container(
-                  width: 70,
-                  height: 70,
+                  width: 92,
+                  height: 92,
                   color: PdfColors.grey300,
                   alignment: pw.Alignment.center,
                   child: pw.Text(
                     datos.nombre.trim().isNotEmpty ? datos.nombre.trim()[0].toUpperCase() : '?',
-                    style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: rojo),
+                    style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold, color: rojo),
                   ),
                 ),
         ),

@@ -103,7 +103,8 @@ class _ParadaDetalleScreenState extends State<ParadaDetalleScreen> {
   Widget build(BuildContext context) {
     final estado = widget.parada.estado;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.parada.nombre)),
+      appBar: AppBar(
+          title: Text(widget.parada.nombre, overflow: TextOverflow.ellipsis, maxLines: 1)),
       body: RefreshIndicator(
         onRefresh: _refrescar,
         child: ListView(

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 /// Badge circular de color con un ícono adentro — el patrón visual base
-/// para tarjetas de acción/estado en toda la app (referencia UX de
-/// Elias, 2026-08-04: círculos de color grandes con ícono blanco).
+/// para tarjetas de acción/estado en toda la app
+/// círculos de color grandes con ícono blanco).
 class IconBadge extends StatelessWidget {
   final IconData icono;
   final Color color;

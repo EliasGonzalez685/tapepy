@@ -34,7 +34,7 @@ class _ConveniosOrganizacionScreenState extends State<ConveniosOrganizacionScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('CONVENIOS DE PUBLICIDAD')),
+      appBar: AppBar(title: const Text('Convenios')),
       body: RefreshIndicator(
         onRefresh: _refrescar,
         child: FutureBuilder<List<ConvenioItem>>(

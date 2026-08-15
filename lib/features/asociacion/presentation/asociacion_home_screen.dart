@@ -184,7 +184,8 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_organizacionNombre ?? 'TapePy')),
+      appBar: AppBar(
+          title: Text(_organizacionNombre ?? 'TapePy', overflow: TextOverflow.ellipsis, maxLines: 1)),
       drawer: MenuLateral(
         usuario: widget.usuario,
         noLeidosFuture: _noLeidosFuture,
@@ -392,57 +393,72 @@ class _GreetingHeader extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Logo real de Traude (la organización). El saludo de al lado
-          // usa el nombre de la persona logueada — son cosas distintas.
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: Colors.white,
-            backgroundImage: const AssetImage('assets/images/traude_logo.png'),
-            onBackgroundImageError: (_, __) {},
-            child: usuario == null
-                ? Text(
-                    inicial,
-                    style: const TextStyle(
-                      color: AppTheme.rojoInstitucional,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
+          Row(
+            children: [
+              // Logo real de Traude (la organización). El saludo de al
+              // lado usa el nombre de la persona logueada — son cosas
+              // distintas.
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: Colors.white,
+                backgroundImage: const AssetImage('assets/images/traude_logo.png'),
+                onBackgroundImageError: (_, __) {},
+                child: usuario == null
+                    ? Text(
+                        inicial,
+                        style: const TextStyle(
+                          color: AppTheme.rojoInstitucional,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 14),
+              // Expanded + Column propio (no comparte fila con el
+              // switch de "en servicio"): en un celular real, un Row
+              // con avatar + nombre + switch todos juntos deja muy
+              // poco ancho para el nombre y lo trunca de entrada.
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$_saludo, $nombre',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$_saludo, $nombre',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 17,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 2),
+                    Text(
+                      _rolLabel,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _rolLabel,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
           // El dueño de plataforma no hace trabajo de campo de ninguna
           // asociación puntual — la bandera "en servicio" no le
           // corresponde (mismo criterio que carnet/QR en MenuLateral).
+          // Va en su propia fila, debajo, para no competir por ancho
+          // con el nombre.
           if (usuario != null && usuario!.rol != UserRole.duenoPlataforma) ...[
-            const SizedBox(width: 8),
-            EnServicioSwitch(usuarioId: usuario!.id, valorInicial: usuario!.enServicio),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: EnServicioSwitch(usuarioId: usuario!.id, valorInicial: usuario!.enServicio),
+            ),
           ],
         ],
       ),

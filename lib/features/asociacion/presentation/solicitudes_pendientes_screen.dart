@@ -204,9 +204,11 @@ class _SolicitudesPendientesScreenState extends State<SolicitudesPendientesScree
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SOLICITUDES PENDIENTES'),
+        title: const Text('Solicitudes pendientes'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: [
             Tab(
               child: Row(
@@ -533,7 +535,7 @@ class _FirmasTab extends StatelessWidget {
                                         .bodySmall
                                         ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                                 if (item.paradaNombre != null)
-                                  Text('Para el listado de ${item.paradaNombre}',
+                                  Text('Parada: ${item.paradaNombre}',
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall

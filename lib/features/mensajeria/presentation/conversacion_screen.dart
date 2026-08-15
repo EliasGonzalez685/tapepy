@@ -97,9 +97,12 @@ class _ConversacionScreenState extends State<ConversacionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(widget.otroNombre),
+            Text(widget.otroNombre, overflow: TextOverflow.ellipsis, maxLines: 1),
             if (widget.otroRolLabel != null)
-              Text(widget.otroRolLabel!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal)),
+              Text(widget.otroRolLabel!,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal)),
           ],
         ),
       ),

@@ -108,7 +108,7 @@ class _ParadasScreenState extends State<ParadasScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('PARADAS DE LA ASOCIACIÓN')),
+      appBar: AppBar(title: const Text('Paradas')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _nuevaParada,
         backgroundColor: AppTheme.rojoInstitucional,

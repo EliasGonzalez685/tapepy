@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/config/supabase_config.dart';
+import '../../../shared/models/user_role.dart';
 
 /// Estado de la firma de "el otro presidente" respecto de quien está
 /// armando el listado: si no la pidió todavía, si ya la pidió y está
@@ -32,14 +33,16 @@ class SolicitudFirmaItem {
   factory SolicitudFirmaItem.fromMap(Map<String, dynamic> map) {
     final solicitante = map['solicitante'] as Map<String, dynamic>;
     final parada = map['paradas'] as Map<String, dynamic>?;
+    // El solicitante puede ser el otro presidente (para un listado) o,
+    // desde que la constancia también puede llevar firma, un conductor
+    // pidiendo la firma de una autoridad para su propia constancia.
     return SolicitudFirmaItem(
       id: map['id'] as String,
       paradaId: map['parada_id'] as String,
       paradaNombre: parada?['nombre'] as String?,
       solicitanteId: solicitante['id'] as String,
       solicitanteNombre: solicitante['nombre'] as String,
-      solicitanteRolLabel:
-          solicitante['rol'] == 'presidente_asociacion' ? 'Presidente de Asociación' : 'Presidente de Parada',
+      solicitanteRolLabel: UserRole.fromString(solicitante['rol'] as String).label,
       creadoEn: DateTime.parse(map['creado_en'] as String),
     );
   }
@@ -58,6 +61,13 @@ class FirmaService {
   Future<String?> cargarFirmaUrl(String usuarioId) async {
     final row = await _client.from('usuarios').select('firma_url').eq('id', usuarioId).maybeSingle();
     return row?['firma_url'] as String?;
+  }
+
+  /// Nombre del titular de una firma, para imprimir debajo del cargo en
+  /// los documentos (listados, constancias).
+  Future<String?> cargarNombreUsuario(String usuarioId) async {
+    final row = await _client.from('usuarios').select('nombre').eq('id', usuarioId).maybeSingle();
+    return row?['nombre'] as String?;
   }
 
   /// Sube la imagen de firma a `firmas/{organizacionId}/{usuarioId}/firma.png`

@@ -7,8 +7,10 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/data/organizacion_service.dart';
 import '../../../shared/models/usuario.dart';
 import '../../../shared/models/user_role.dart';
+import '../../../shared/utils/firma_cargo.dart';
 import '../../firma/data/firma_service.dart';
 import '../../firma/presentation/mi_firma_screen.dart';
 import '../data/parada_detalle_service.dart';
@@ -120,6 +122,7 @@ class ImprimirListadoScreen extends StatefulWidget {
 class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   final _service = ParadaDetalleService();
   final _firmaService = FirmaService();
+  final _organizacionService = OrganizacionService();
   late Future<List<ConductorListadoItem>> _future;
   late final Set<_Columna> _seleccionadas;
   bool _generando = false;
@@ -132,10 +135,12 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   // --- Firmas ---
   bool _cargandoFirmas = false;
   bool _solicitandoFirma = false;
+  String? _organizacionNombre;
   String? _miFirmaPath;
   bool _incluirMiFirma = false;
   String? _paradaIdConsultada; // para no volver a pedir si no cambió el alcance
   String? _otroPresidenteId;
+  String? _otroPresidenteNombre;
   String? _otroFirmaPath;
   EstadoFirma _estadoOtraFirma = EstadoFirma.ninguna;
   bool _incluirOtraFirma = false;
@@ -174,6 +179,20 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
     return null;
   }
 
+  /// Igual que [_paradaIdActual] pero el nombre, para armar el cargo del
+  /// presidente de parada en el bloque de firma.
+  String? get _paradaNombreActual => widget._todasLasParadas ? _paradaFiltro : widget.paradaNombre;
+
+  /// Cargo que va arriba del nombre en el bloque de firma propio.
+  String get _cargoPropio => widget.usuario.rol == UserRole.presidenteAsociacion
+      ? cargoPresidenteAsociacion(_organizacionNombre)
+      : cargoPresidenteParada(widget.paradaNombre);
+
+  /// Cargo del "otro" presidente, si su firma se incluye.
+  String get _cargoOtro => widget.usuario.rol == UserRole.presidenteAsociacion
+      ? cargoPresidenteParada(_paradaNombreActual)
+      : cargoPresidenteAsociacion(_organizacionNombre);
+
   void _inicializarSeleccion(List<ConductorListadoItem> items) {
     _items ??= items;
     _seleccionados ??= items.toSet();
@@ -204,6 +223,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
       final firmaPropia = await _firmaService.cargarFirmaUrl(usuario.id);
 
       String? otroId;
+      String? otroNombre;
       String? otroFirma;
       var estado = EstadoFirma.ninguna;
 
@@ -214,6 +234,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
           otroId = await _firmaService.obtenerPresidenteAsociacionId(usuario.organizacionId!);
         }
         if (otroId != null) {
+          otroNombre = await _firmaService.cargarNombreUsuario(otroId);
           estado = await _firmaService.consultarEstado(
             solicitanteId: usuario.id,
             firmanteId: otroId,
@@ -230,6 +251,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         _miFirmaPath = firmaPropia;
         _incluirMiFirma = firmaPropia != null;
         _otroPresidenteId = otroId;
+        _otroPresidenteNombre = otroNombre;
         _estadoOtraFirma = estado;
         _otroFirmaPath = otroFirma;
         _incluirOtraFirma = estado == EstadoFirma.aprobada && otroFirma != null;
@@ -274,6 +296,15 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         ? _service.cargarListadoConductoresOrganizacion(organizacionId: widget.usuario.organizacionId)
         : _service.cargarListadoConductores(widget.paradaId!);
     _cargarFirmas();
+    _cargarOrganizacion();
+  }
+
+  Future<void> _cargarOrganizacion() async {
+    final organizacionId = widget.usuario.organizacionId;
+    if (organizacionId == null) return;
+    final nombre = await _organizacionService.cargarNombre(organizacionId);
+    if (!mounted) return;
+    setState(() => _organizacionNombre = nombre);
   }
 
   Future<void> _generarPdf() async {
@@ -307,9 +338,11 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         columnas: columnas,
         items: items,
         firmaPropiaBytes: firmaPropiaBytes,
-        firmaPropiaLabel: firmaPropiaBytes != null ? widget.usuario.rol.label : null,
+        cargoPropio: firmaPropiaBytes != null ? _cargoPropio : null,
+        nombrePropio: firmaPropiaBytes != null ? widget.usuario.nombre : null,
         firmaOtraBytes: firmaOtraBytes,
-        firmaOtraLabel: firmaOtraBytes != null ? _otroRolLabel : null,
+        cargoOtro: firmaOtraBytes != null ? _cargoOtro : null,
+        nombreOtro: firmaOtraBytes != null ? _otroPresidenteNombre : null,
       );
       await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'listado_socios.pdf');
     } finally {
@@ -331,7 +364,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('IMPRIMIR LISTADO')),
+      appBar: AppBar(title: const Text('Imprimir listado')),
       body: FutureBuilder<List<ConductorListadoItem>>(
         future: _future,
         builder: (context, snapshot) {
@@ -668,9 +701,11 @@ Future<Uint8List> _construirPdf({
   required List<_Columna> columnas,
   required List<ConductorListadoItem> items,
   Uint8List? firmaPropiaBytes,
-  String? firmaPropiaLabel,
+  String? cargoPropio,
+  String? nombrePropio,
   Uint8List? firmaOtraBytes,
-  String? firmaOtraLabel,
+  String? cargoOtro,
+  String? nombreOtro,
 }) async {
   final doc = pw.Document();
   final rojo = PdfColor.fromHex('#CC0000');
@@ -772,7 +807,7 @@ Future<Uint8List> _construirPdf({
         ],
       );
 
-  pw.Widget bloqueFirma(Uint8List bytes, String etiqueta) => pw.Column(
+  pw.Widget bloqueFirma(Uint8List bytes, String cargo, String? nombre) => pw.Column(
         children: [
           pw.Container(
             height: 55,
@@ -782,7 +817,14 @@ Future<Uint8List> _construirPdf({
           ),
           pw.Container(width: 160, height: 0.8, color: PdfColors.grey700),
           pw.SizedBox(height: 4),
-          pw.Text(etiqueta, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+          pw.Text(cargo,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+          if (nombre != null && nombre.isNotEmpty) ...[
+            pw.SizedBox(height: 2),
+            pw.Text(nombre,
+                textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+          ],
         ],
       );
 
@@ -812,8 +854,8 @@ Future<Uint8List> _construirPdf({
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
             children: [
-              if (firmaPropiaBytes != null) bloqueFirma(firmaPropiaBytes, firmaPropiaLabel ?? ''),
-              if (firmaOtraBytes != null) bloqueFirma(firmaOtraBytes, firmaOtraLabel ?? ''),
+              if (firmaPropiaBytes != null) bloqueFirma(firmaPropiaBytes, cargoPropio ?? '', nombrePropio),
+              if (firmaOtraBytes != null) bloqueFirma(firmaOtraBytes, cargoOtro ?? '', nombreOtro),
             ],
           ),
         ],

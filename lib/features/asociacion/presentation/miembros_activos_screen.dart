@@ -112,9 +112,11 @@ class _MiembrosActivosScreenState extends State<MiembrosActivosScreen> {
                     children: [
                       const Icon(Icons.flag, color: AppTheme.estadoOk, size: 20),
                       const SizedBox(width: 10),
-                      Text(
-                        '$activos de ${miembros.length} miembros en servicio ahora',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      Expanded(
+                        child: Text(
+                          '$activos de ${miembros.length} miembros en servicio ahora',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ],
                   ),

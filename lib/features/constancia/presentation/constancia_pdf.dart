@@ -116,7 +116,7 @@ Future<Uint8List> construirPdfConstancia(
               child: pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain),
             )
           else
-            const pw.SizedBox(height: 45),
+            pw.SizedBox(height: 45),
           pw.Container(width: 150, height: 0.8, color: PdfColors.grey700),
           pw.SizedBox(height: 4),
           pw.Text(cargo,

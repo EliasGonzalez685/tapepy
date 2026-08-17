@@ -1083,20 +1083,31 @@ Future<Uint8List> _construirPdf({
         ],
       );
 
-  // Un addPage(MultiPage(...)) por sección: cada uno arranca su propia
-  // numeración de página desde 1, así el membrete (header condicionado a
-  // pageNumber == 1) y el bloque de firma (al final del `build`) salen
-  // una sola vez por parada aunque esa parada sola ocupe varias hojas —
-  // sin repetir la firma en cada página intermedia.
+  // Un addPage(MultiPage(...)) por sección, cada una con su propio
+  // membrete y bloque de firma al final. OJO: context.pageNumber es
+  // GLOBAL a todo el Document (no se reinicia por MultiPage), así que
+  // comparar contra 1 solo mostraba el membrete en la primerísima
+  // página de TODO el PDF y dejaba en blanco el encabezado de cada
+  // sección siguiente (por eso todo el listado parecía pertenecer a la
+  // primera parada). Acá se guarda el número de página global que le
+  // toca a la PRIMERA página de esta sección en particular (la primera
+  // vez que se llama header dentro de este MultiPage) y se compara
+  // contra eso, no contra 1 -- así cada sección muestra su propio
+  // membrete una sola vez, sin repetirlo en las páginas siguientes de
+  // esa misma sección.
   for (final seccion in secciones) {
     final tieneFirmas = seccion.firmaPropiaBytes != null || seccion.firmaOtraBytes != null;
+    int? primeraPaginaSeccion;
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(28),
-        header: (context) => context.pageNumber == 1
-            ? membrete(subtitulo: seccion.subtitulo, cantidad: seccion.items.length)
-            : pw.SizedBox.shrink(),
+        header: (context) {
+          primeraPaginaSeccion ??= context.pageNumber;
+          return context.pageNumber == primeraPaginaSeccion
+              ? membrete(subtitulo: seccion.subtitulo, cantidad: seccion.items.length)
+              : pw.SizedBox.shrink();
+        },
         build: (context) => [
           tabla(seccion.items),
           if (tieneFirmas) ...[

@@ -70,6 +70,7 @@ class ConstanciaParaImprimir {
   final String? cedula;
   final String tipoSocio;
   final String paradaNombre;
+  final String organizacionId;
   final String organizacionNombre;
   final DateTime fecha;
 
@@ -77,6 +78,7 @@ class ConstanciaParaImprimir {
     required this.nombre,
     required this.tipoSocio,
     required this.paradaNombre,
+    required this.organizacionId,
     required this.organizacionNombre,
     required this.fecha,
     this.cedula,
@@ -118,7 +120,7 @@ class ConstanciaService {
     final row = await _client
         .from('solicitudes_constancia')
         .select(
-            'tipo_socio, creado_en, resuelto_en, paradas(nombre), organizaciones(nombre), usuarios!solicitudes_constancia_solicitante_id_fkey(nombre, cedula)')
+            'tipo_socio, creado_en, resuelto_en, organizacion_id, paradas(nombre), organizaciones(nombre), usuarios!solicitudes_constancia_solicitante_id_fkey(nombre, cedula)')
         .eq('id', solicitudId)
         .single();
     final usuario = row['usuarios'] as Map<String, dynamic>;
@@ -130,6 +132,7 @@ class ConstanciaService {
       cedula: usuario['cedula'] as String?,
       tipoSocio: row['tipo_socio'] as String? ?? 'chofer',
       paradaNombre: parada?['nombre'] as String? ?? '',
+      organizacionId: row['organizacion_id'] as String,
       organizacionNombre: organizacion?['nombre'] as String? ?? 'TRAUDE',
       fecha: resueltoEn != null ? DateTime.parse(resueltoEn) : DateTime.parse(row['creado_en'] as String),
     );

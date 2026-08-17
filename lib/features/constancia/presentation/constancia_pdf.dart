@@ -25,21 +25,15 @@ const _meses = [
 
 /// Constancia formal: mismo membrete que el listado de socios y el
 /// balance de pagos, pero el cuerpo es un párrafo de texto (no una
-/// tabla) — y deja uno o dos bloques de firma al final (presidente de
-/// asociación y/o de parada, según lo que haya elegido quien imprime).
-/// Cada bloque lleva el cargo formateado (ver [cargoPresidenteAsociacion]
-/// y [cargoPresidenteParada]) y el nombre de la persona debajo; la
-/// imagen de la firma solo aparece si esa autoridad ya subió su firma
-/// digital y fue incluida — si no, queda la línea en blanco para firmar
-/// a mano.
+/// tabla) — y deja al final un solo bloque de firma, siempre del
+/// presidente de asociación (nunca el de parada, pedido explícito de
+/// Elias 2026-08-17). El bloque lleva el cargo formateado (ver
+/// [cargoPresidenteAsociacion]) y el nombre debajo, con un espacio en
+/// blanco arriba para que firme a mano después de imprimir -- no hace
+/// falta ninguna firma digital acá, igual que en los listados.
 Future<Uint8List> construirPdfConstancia(
   ConstanciaParaImprimir datos, {
-  bool incluirAsociacion = true,
-  Uint8List? firmaAsociacionBytes,
   String? nombreAsociacion,
-  bool incluirParada = false,
-  Uint8List? firmaParadaBytes,
-  String? nombreParada,
 }) async {
   final doc = pw.Document();
   final rojo = PdfColor.fromHex('#CC0000');
@@ -106,17 +100,11 @@ Future<Uint8List> construirPdfConstancia(
       'Se expide la presente constancia a pedido del interesado, para los fines que estime conveniente, '
       '$diaTexto del mes de $mesTexto del año $anioTexto.';
 
-  pw.Widget bloqueFirma(String cargo, String? nombre, Uint8List? bytes) => pw.Column(
+  // Sin imagen: solo un espacio en blanco arriba de la línea para que
+  // el presidente de asociación firme a mano después de imprimir.
+  pw.Widget bloqueFirma(String cargo, String? nombre) => pw.Column(
         children: [
-          if (bytes != null)
-            pw.Container(
-              height: 45,
-              width: 150,
-              alignment: pw.Alignment.bottomCenter,
-              child: pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain),
-            )
-          else
-            pw.SizedBox(height: 45),
+          pw.SizedBox(height: 45),
           pw.Container(width: 150, height: 0.8, color: PdfColors.grey700),
           pw.SizedBox(height: 4),
           pw.Text(cargo,
@@ -130,12 +118,6 @@ Future<Uint8List> construirPdfConstancia(
         ],
       );
 
-  final bloquesFirma = <pw.Widget>[
-    if (incluirAsociacion)
-      bloqueFirma(cargoPresidenteAsociacion(datos.organizacionNombre), nombreAsociacion, firmaAsociacionBytes),
-    if (incluirParada) bloqueFirma(cargoPresidenteParada(datos.paradaNombre), nombreParada, firmaParadaBytes),
-  ];
-
   doc.addPage(
     pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -148,8 +130,7 @@ Future<Uint8List> construirPdfConstancia(
           pw.SizedBox(height: 14),
           pw.Text(parrafo2, style: const pw.TextStyle(fontSize: 12), textAlign: pw.TextAlign.justify),
           pw.SizedBox(height: 60),
-          if (bloquesFirma.isNotEmpty)
-            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly, children: bloquesFirma),
+          pw.Center(child: bloqueFirma(cargoPresidenteAsociacion(datos.organizacionNombre), nombreAsociacion)),
         ],
       ),
     ),

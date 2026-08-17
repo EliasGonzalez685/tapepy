@@ -22,6 +22,7 @@ import '../data/parada_detalle_service.dart';
 /// presidente, que es otra cosa).
 enum _Columna {
   nombre,
+  parada,
   cedula,
   telefono,
   turno,
@@ -40,6 +41,8 @@ extension on _Columna {
     switch (this) {
       case _Columna.nombre:
         return 'Nombre';
+      case _Columna.parada:
+        return 'Parada';
       case _Columna.cedula:
         return 'Cédula';
       case _Columna.telefono:
@@ -69,6 +72,8 @@ extension on _Columna {
     switch (this) {
       case _Columna.nombre:
         return item.nombre;
+      case _Columna.parada:
+        return item.paradaNombre ?? '—';
       case _Columna.cedula:
         return item.cedula ?? '—';
       case _Columna.telefono:
@@ -149,18 +154,15 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   String? _otroFirmaPath;
   EstadoFirma _estadoOtraFirma = EstadoFirma.ninguna;
   bool _incluirOtraFirma = false;
-  // Solo aplica en modo "todas las paradas juntas": la firma de cada
-  // presidente de parada, una por sección, tomada de aprobaciones que
-  // ya existan (no dispara ningún pedido nuevo -- pedir de a una por
-  // parada se sigue haciendo desde el modo de una sola parada).
-  bool _incluirFirmasParadas = false;
 
   String get _otroRolLabel =>
       widget.usuario.rol == UserRole.presidenteAsociacion ? 'Presidente de Parada' : 'Presidente de Asociación';
 
-  /// "Todas las paradas" sin acotar a una sola: se genera un PDF con un
-  /// listado separado por cada parada (pedido de Elias, 2026-08-17), no
-  /// una tabla única mezclando todo.
+  /// "Todas las paradas" sin acotar a una sola: todos los conductores
+  /// elegidos, sin importar de qué parada sean, van en UNA sola tabla
+  /// (no una tabla por parada) -- pedido explícito de Elias, 2026-08-17.
+  /// Como puede mezclar gente de varias paradas, conviene sumar la
+  /// columna "Parada" para identificar cada fila (ver _Columna.parada).
   bool get _modoBulk => widget._todasLasParadas && _paradaFiltro == null;
 
   List<_Columna> get _columnasDisponibles => _Columna.values;
@@ -338,9 +340,10 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
     try {
       final columnas = _columnasDisponibles.where(_seleccionadas.contains).toList();
 
-      final secciones = _modoBulk
-          ? await _construirSeccionesPorParada(items)
-          : await _construirSeccionUnica(items);
+      // Siempre una sola sección/tabla, sea una parada puntual o "todas
+      // las paradas" juntas -- Elias pidió explícitamente que en ese
+      // último caso no se separe por hoja (ver _modoBulk).
+      final secciones = await _construirSeccionUnica(items);
 
       final bytes = await _construirPdf(secciones: secciones, columnas: columnas);
       await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'listado_socios.pdf');
@@ -349,8 +352,9 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
     }
   }
 
-  /// Una sola parada (o la que sea que el presidente de parada tiene
-  /// asignada): un único listado, igual que siempre.
+  /// Un único listado -- ya sea de una sola parada (o la que sea que el
+  /// presidente de parada tiene asignada) o de "todas las paradas"
+  /// juntas en una misma tabla (sin separar por hoja, ver _modoBulk).
   Future<List<_SeccionListado>> _construirSeccionUnica(List<ConductorListadoItem> items) async {
     final nombreParada = widget._todasLasParadas ? _paradaFiltro : widget.paradaNombre;
 
@@ -375,75 +379,6 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         nombreOtro: firmaOtraBytes != null ? _otroPresidenteNombre : null,
       ),
     ];
-  }
-
-  /// "Todas las paradas": un listado por parada, cada uno bien separado
-  /// (arranca en página nueva -- ver _construirPdf). La firma del
-  /// presidente de asociación es la misma en todas las secciones (se
-  /// descarga una sola vez); la de cada presidente de parada se busca
-  /// aparte por sección y solo se suma si ya está aprobada -- acá no se
-  /// dispara ningún pedido nuevo.
-  Future<List<_SeccionListado>> _construirSeccionesPorParada(List<ConductorListadoItem> items) async {
-    final porParada = <String, List<ConductorListadoItem>>{};
-    for (final item in items) {
-      final nombre = item.paradaNombre ?? 'Sin parada';
-      porParada.putIfAbsent(nombre, () => []).add(item);
-    }
-    final nombresOrdenados = porParada.keys.toList()..sort();
-
-    Uint8List? firmaAsociacionBytes;
-    if (_incluirMiFirma && _miFirmaPath != null) {
-      firmaAsociacionBytes = await _descargarFirma(_miFirmaPath!);
-    }
-    final cargoAsociacion = firmaAsociacionBytes != null ? _cargoPropio : null;
-    final nombreAsociacion = firmaAsociacionBytes != null ? widget.usuario.nombre : null;
-
-    final secciones = <_SeccionListado>[];
-    for (final nombreParada in nombresOrdenados) {
-      final itemsParada = porParada[nombreParada]!;
-      final paradaId = itemsParada.first.paradaId;
-
-      Uint8List? firmaParadaBytes;
-      String? cargoParada;
-      String? nombrePresidenteParada;
-      if (_incluirFirmasParadas && paradaId != null) {
-        try {
-          final presidenteId = await _firmaService.obtenerPresidenteParadaId(paradaId);
-          if (presidenteId != null) {
-            final estado = await _firmaService.consultarEstado(
-              solicitanteId: widget.usuario.id,
-              firmanteId: presidenteId,
-              paradaId: paradaId,
-            );
-            if (estado == EstadoFirma.aprobada) {
-              final path = await _firmaService.cargarFirmaUrl(presidenteId);
-              if (path != null) {
-                firmaParadaBytes = await _descargarFirma(path);
-                if (firmaParadaBytes != null) {
-                  nombrePresidenteParada = await _firmaService.cargarNombreUsuario(presidenteId);
-                  cargoParada = cargoPresidenteParada(nombreParada);
-                }
-              }
-            }
-          }
-        } catch (_) {
-          // Si falla la consulta de esta parada puntual, esa sección
-          // sale sin su firma -- no bloquea el resto del PDF.
-        }
-      }
-
-      secciones.add(_SeccionListado(
-        subtitulo: 'PARADA Nº ${_tituloParada(nombreParada)}',
-        items: itemsParada,
-        firmaPropiaBytes: firmaAsociacionBytes,
-        cargoPropio: cargoAsociacion,
-        nombrePropio: nombreAsociacion,
-        firmaOtraBytes: firmaParadaBytes,
-        cargoOtro: cargoParada,
-        nombreOtro: nombrePresidenteParada,
-      ));
-    }
-    return secciones;
   }
 
   /// Muchos nombres de parada ya arrancan con la palabra "Parada" (p.
@@ -513,7 +448,8 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
                 if (_modoBulk) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Se genera un PDF con un listado separado por cada parada, cada uno en su propia página.',
+                    'Se genera un único listado con todos los conductores elegidos, sin separar por parada. '
+                    'Sumá la columna "Parada" abajo si querés identificar de dónde es cada uno.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -548,26 +484,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
               const SizedBox(height: 24),
               Text('Firmas a incluir', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
-              if (_modoBulk)
-                _SeccionFirmasBulk(
-                  miFirmaDisponible: _miFirmaPath != null,
-                  miRolLabel: widget.usuario.rol.label,
-                  incluirMiFirma: _incluirMiFirma,
-                  onCambiarMiFirma: _miFirmaPath == null
-                      ? null
-                      : (valor) => setState(() => _incluirMiFirma = valor),
-                  onIrASubirFirma: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => MiFirmaScreen(usuario: widget.usuario)),
-                    );
-                    setState(() => _paradaIdConsultada = null);
-                    _cargarFirmas();
-                  },
-                  incluirFirmasParadas: _incluirFirmasParadas,
-                  onCambiarFirmasParadas: (valor) => setState(() => _incluirFirmasParadas = valor),
-                )
-              else
-                _SeccionFirmas(
+              _SeccionFirmas(
                   cargando: _cargandoFirmas,
                   solicitando: _solicitandoFirma,
                   miFirmaDisponible: _miFirmaPath != null,
@@ -848,68 +765,11 @@ class _BloqueMiFirma extends StatelessWidget {
   }
 }
 
-/// Firmas para el modo "todas las paradas juntas": la propia (misma
-/// idea que en el modo de una sola parada) y un único interruptor para
-/// sumar, en cada sección, la firma de ESE presidente de parada -- sin
-/// pedir nada nuevo, solo usa lo que ya esté aprobado (ver
-/// _construirSeccionesPorParada). Las que falten quedan sin firma de
-/// parada; para pedir una puntual hay que imprimir esa parada sola.
-class _SeccionFirmasBulk extends StatelessWidget {
-  final bool miFirmaDisponible;
-  final String miRolLabel;
-  final bool incluirMiFirma;
-  final ValueChanged<bool>? onCambiarMiFirma;
-  final VoidCallback onIrASubirFirma;
-  final bool incluirFirmasParadas;
-  final ValueChanged<bool> onCambiarFirmasParadas;
-
-  const _SeccionFirmasBulk({
-    required this.miFirmaDisponible,
-    required this.miRolLabel,
-    required this.incluirMiFirma,
-    required this.onCambiarMiFirma,
-    required this.onIrASubirFirma,
-    required this.incluirFirmasParadas,
-    required this.onCambiarFirmasParadas,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _BloqueMiFirma(
-              disponible: miFirmaDisponible,
-              rolLabel: miRolLabel,
-              incluir: incluirMiFirma,
-              onCambiar: onCambiarMiFirma,
-              onIrASubir: onIrASubirFirma,
-            ),
-            const Divider(height: 1),
-            CheckboxListTile(
-              value: incluirFirmasParadas,
-              activeColor: AppTheme.rojoInstitucional,
-              title: const Text('Firma de cada presidente de parada'),
-              subtitle: const Text(
-                'Se suma en cada sección la que ya esté aprobada. Las que falten quedan sin firma de parada.',
-              ),
-              onChanged: (v) => onCambiarFirmasParadas(v ?? false),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Fila de datos para armar un listado: sale con su propio membrete,
-/// tabla y bloque de firma -- en modo de una sola parada hay una sola
-/// [_SeccionListado] en la lista, en modo "todas juntas" hay una por
-/// cada parada con conductores seleccionados.
+/// Fila de datos para armar un listado: siempre sale una sola
+/// [_SeccionListado] en la lista (una sola tabla, un solo membrete, un
+/// solo bloque de firma), sea de una parada puntual o de "todas las
+/// paradas" juntas -- ver _modoBulk. _construirPdf igual acepta una
+/// lista por si en el futuro hiciera falta más de una sección.
 class _SeccionListado {
   final String? subtitulo;
   final List<ConductorListadoItem> items;

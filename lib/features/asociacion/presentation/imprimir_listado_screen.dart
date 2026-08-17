@@ -30,7 +30,8 @@ enum _Columna {
   modelo,
   anio,
   color,
-  resolucion,
+  resolucionIndividual,
+  resolucionParada,
   firma,
 }
 
@@ -55,8 +56,10 @@ extension on _Columna {
         return 'Año';
       case _Columna.color:
         return 'Color';
-      case _Columna.resolucion:
-        return 'Resolución Nº';
+      case _Columna.resolucionIndividual:
+        return 'Resolución Nº (socio)';
+      case _Columna.resolucionParada:
+        return 'Resolución Nº (parada)';
       case _Columna.firma:
         return 'Firma';
     }
@@ -82,8 +85,10 @@ extension on _Columna {
         return item.anio?.toString() ?? '—';
       case _Columna.color:
         return item.color ?? '—';
-      case _Columna.resolucion:
-        return item.resolucionNumero ?? '—';
+      case _Columna.resolucionIndividual:
+        return item.resolucionIndividual ?? '—';
+      case _Columna.resolucionParada:
+        return item.resolucionParada ?? '—';
       case _Columna.firma:
         return ''; // A propósito en blanco: acá firma el conductor a mano.
     }

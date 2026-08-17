@@ -11,7 +11,7 @@ class CarnetData {
   final String rolLabel;
   final String? cedula;
   final String? telefono;
-  final String? numeroSocio;
+  final String? resolucionIndividual;
   final String? fotoPerfilUrl;
   final String organizacionNombre;
   final String qrToken;
@@ -28,7 +28,7 @@ class CarnetData {
     required this.vencimiento,
     this.cedula,
     this.telefono,
-    this.numeroSocio,
+    this.resolucionIndividual,
     this.fotoPerfilUrl,
   });
 }
@@ -45,30 +45,33 @@ class PerfilService {
   final _client = SupabaseConfig.client;
   static const _bucket = 'avatars';
 
-  /// Nombre, teléfono, cédula y N° de socio que el propio usuario
-  /// declara — vale para cualquier rol (conductor, presidente de
-  /// parada o de asociación). Email queda afuera a propósito: está
-  /// atado a la cuenta de Supabase Auth y cambiarlo acá lo desincroniza.
+  /// Nombre, teléfono, cédula y Resolución Nº (individual, del propio
+  /// socio) que el usuario declara — vale para cualquier rol (conductor,
+  /// presidente de parada o de asociación). No hace falta cargarla al
+  /// registrarse, se completa después desde acá. Email queda afuera a
+  /// propósito: está atado a la cuenta de Supabase Auth y cambiarlo acá
+  /// lo desincroniza.
   Future<void> actualizarDatosPersonales({
     required String usuarioId,
     required String nombre,
     String? telefono,
     String? cedula,
-    String? numeroSocio,
+    String? resolucionIndividual,
   }) async {
     try {
       await _client.from('usuarios').update({
         'nombre': nombre.trim(),
         'telefono': (telefono == null || telefono.trim().isEmpty) ? null : telefono.trim(),
         'cedula': (cedula == null || cedula.trim().isEmpty) ? null : cedula.trim(),
-        'numero_socio':
-            (numeroSocio == null || numeroSocio.trim().isEmpty) ? null : numeroSocio.trim(),
+        'resolucion_individual': (resolucionIndividual == null || resolucionIndividual.trim().isEmpty)
+            ? null
+            : resolucionIndividual.trim(),
       }).eq('id', usuarioId);
     } on PostgrestException catch (e) {
       if (e.code == '23505') {
         final detalle = e.details?.toString() ?? '';
-        if (detalle.contains('numero_socio')) {
-          throw PerfilException('Ese N° de socio ya está en uso por otra cuenta.');
+        if (detalle.contains('resolucion_individual')) {
+          throw PerfilException('Esa Resolución Nº ya está en uso por otra cuenta.');
         }
         throw PerfilException('Esa cédula ya está registrada por otra cuenta.');
       }
@@ -116,7 +119,7 @@ class PerfilService {
   Future<CarnetData> cargarDatosCarnet(String usuarioId) async {
     final row = await _client
         .from('usuarios')
-        .select('id, nombre, rol, numero_socio, cedula, telefono, foto_perfil_url, '
+        .select('id, nombre, rol, resolucion_individual, cedula, telefono, foto_perfil_url, '
             'qr_token, carnet_vencimiento, organizaciones(nombre)')
         .eq('id', usuarioId)
         .single();
@@ -154,7 +157,7 @@ class PerfilService {
       rolLabel: _labelRol(row['rol'] as String),
       cedula: row['cedula'] as String?,
       telefono: row['telefono'] as String?,
-      numeroSocio: row['numero_socio'] as String?,
+      resolucionIndividual: row['resolucion_individual'] as String?,
       fotoPerfilUrl: row['foto_perfil_url'] as String?,
       organizacionNombre: organizacion?['nombre'] as String? ?? 'Traude',
       qrToken: qrToken,

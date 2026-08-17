@@ -29,6 +29,9 @@ class ConductorItem {
   final String? turno;
   final String? vehiculoDescripcion;
   final String? chapa;
+  // Resolución Nº INDIVIDUAL del conductor (usuarios.resolucion_individual)
+  // — no es por vehículo, es por persona. Distinta de la resolución de
+  // la parada (ver ParadaResumen.resolucionNumero).
   final String? resolucionNumero;
   final bool enServicio;
 
@@ -74,7 +77,7 @@ class ConductorItem {
       turno: map['turno'] as String?,
       vehiculoDescripcion: vehiculoDesc,
       chapa: vehiculo?['chapa'] as String?,
-      resolucionNumero: vehiculo?['resolucion_numero'] as String?,
+      resolucionNumero: usuario?['resolucion_individual'] as String?,
       enServicio: usuario?['en_servicio'] as bool? ?? false,
     );
   }
@@ -222,7 +225,11 @@ class ConductorListadoItem {
   final String? modelo;
   final int? anio;
   final String? color;
-  final String? resolucionNumero;
+  // Dos resoluciones distintas, ambas para no confundir en el listado:
+  // la del conductor (persona, usuarios.resolucion_individual) y la de
+  // la parada (paradas.resolucion_numero), que puede variar por parada.
+  final String? resolucionIndividual;
+  final String? resolucionParada;
 
   ConductorListadoItem({
     required this.nombre,
@@ -236,7 +243,8 @@ class ConductorListadoItem {
     this.modelo,
     this.anio,
     this.color,
-    this.resolucionNumero,
+    this.resolucionIndividual,
+    this.resolucionParada,
   });
 
   /// Un conductor puede tener más de un vehículo (ver
@@ -259,8 +267,10 @@ class ConductorListadoItem {
     final nombre = usuario?['nombre'] as String? ?? 'Sin nombre';
     final cedula = usuario?['cedula'] as String?;
     final telefono = usuario?['telefono'] as String?;
+    final resolucionIndividual = usuario?['resolucion_individual'] as String?;
     final paradaId = parada?['id'] as String?;
     final paradaNombre = parada?['nombre'] as String?;
+    final resolucionParada = parada?['resolucion_numero'] as String?;
     final turno = map['turno'] as String?;
 
     if (vehiculos.isEmpty) {
@@ -272,6 +282,8 @@ class ConductorListadoItem {
           paradaId: paradaId,
           paradaNombre: paradaNombre,
           turno: turno,
+          resolucionIndividual: resolucionIndividual,
+          resolucionParada: resolucionParada,
         ),
       ];
     }
@@ -289,7 +301,8 @@ class ConductorListadoItem {
               modelo: vehiculo['modelo'] as String?,
               anio: (vehiculo['anio'] as num?)?.toInt(),
               color: vehiculo['color'] as String?,
-              resolucionNumero: vehiculo['resolucion_numero'] as String?,
+              resolucionIndividual: resolucionIndividual,
+              resolucionParada: resolucionParada,
             ))
         .toList();
   }
@@ -304,7 +317,7 @@ class ParadaDetalleService {
     final rows = await _client
         .from('conductores')
         .select(
-            'turno, usuarios(nombre, cedula, telefono), vehiculos(marca, modelo, anio, color, chapa, resolucion_numero, incluir_en_listado)')
+            'turno, usuarios(nombre, cedula, telefono, resolucion_individual), paradas(id, nombre, resolucion_numero), vehiculos(marca, modelo, anio, color, chapa, incluir_en_listado)')
         .eq('parada_id', paradaId);
     final items = (rows as List)
         .expand((r) => ConductorListadoItem.listaDesdeFila(r as Map<String, dynamic>))
@@ -322,7 +335,7 @@ class ParadaDetalleService {
     String? organizacionId,
   }) async {
     var query = _client.from('conductores').select(
-        'turno, paradas(id, nombre), usuarios(nombre, cedula, telefono), vehiculos(marca, modelo, anio, color, chapa, resolucion_numero, incluir_en_listado)');
+        'turno, paradas(id, nombre, resolucion_numero), usuarios(nombre, cedula, telefono, resolucion_individual), vehiculos(marca, modelo, anio, color, chapa, incluir_en_listado)');
     if (organizacionId != null) {
       query = query.eq('organizacion_id', organizacionId);
     }
@@ -352,7 +365,7 @@ class ParadaDetalleService {
     final rows = await _client
         .from('vehiculos')
         .select(
-            'id, marca, modelo, anio, chapa, color, resolucion_numero, foto_frente_chapa, foto_lejos, incluir_en_listado')
+            'id, marca, modelo, anio, chapa, color, foto_frente_chapa, foto_lejos, incluir_en_listado')
         .eq('conductor_id', conductorId);
     return (rows as List).map((r) => VehiculoInfo.fromMap(r as Map<String, dynamic>)).toList();
   }
@@ -368,7 +381,7 @@ class ParadaDetalleService {
     final rows = await _client
         .from('conductores')
         .select(
-            'id, usuario_id, turno, usuarios(nombre, telefono, en_servicio), vehiculos(marca, modelo, chapa, resolucion_numero)')
+            'id, usuario_id, turno, usuarios(nombre, telefono, en_servicio, resolucion_individual), vehiculos(marca, modelo, chapa)')
         .eq('parada_id', paradaId);
     return (rows as List)
         .map((r) => ConductorItem.fromMap(r as Map<String, dynamic>))

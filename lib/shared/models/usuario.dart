@@ -14,7 +14,11 @@ class Usuario {
   final String? email;
   final UserRole rol;
   final String? fotoPerfilUrl;
-  final String? numeroSocio;
+  // Resolución que habilita a ESTA persona (conductor o cualquiera de
+  // los dos presidentes) — distinta de la resolución de la parada
+  // (paradas.resolucion_numero). No hace falta cargarla al registrarse,
+  // se completa después desde Datos personales.
+  final String? resolucionIndividual;
   final String? tallaRemera;
   final bool activo;
   final bool cuentaConfirmada;
@@ -29,7 +33,7 @@ class Usuario {
     this.email,
     required this.rol,
     this.fotoPerfilUrl,
-    this.numeroSocio,
+    this.resolucionIndividual,
     this.tallaRemera,
     required this.activo,
     this.cuentaConfirmada = true,
@@ -50,7 +54,7 @@ class Usuario {
       email: email,
       rol: rol,
       fotoPerfilUrl: fotoPerfilUrl,
-      numeroSocio: numeroSocio,
+      resolucionIndividual: resolucionIndividual,
       tallaRemera: tallaRemera,
       activo: activo,
       cuentaConfirmada: cuentaConfirmada,
@@ -68,7 +72,7 @@ class Usuario {
       email: map['email'] as String?,
       rol: UserRole.fromString(map['rol'] as String),
       fotoPerfilUrl: map['foto_perfil_url'] as String?,
-      numeroSocio: map['numero_socio'] as String?,
+      resolucionIndividual: map['resolucion_individual'] as String?,
       tallaRemera: map['talla_remera'] as String?,
       activo: map['activo'] as bool? ?? true,
       cuentaConfirmada: map['cuenta_confirmada'] as bool? ?? true,

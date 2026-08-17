@@ -41,6 +41,10 @@ class ParadaResumen {
   // ParadaResumen.fromMap (como parada_presidente_service.dart) sigue
   // andando igual, sin este dato.
   final int conductoresActivosCount;
+  // Resolución de LA PARADA — distinta de la resolución individual de
+  // cada socio (usuarios.resolucion_individual). Puede variar entre
+  // paradas, por eso vive acá y no a nivel organización.
+  final String? resolucionNumero;
 
   ParadaResumen({
     required this.id,
@@ -49,6 +53,7 @@ class ParadaResumen {
     required this.cuotasAtrasadasCount,
     required this.docsPorVencerCount,
     this.conductoresActivosCount = 0,
+    this.resolucionNumero,
   });
 
   ParadaEstado get estado {
@@ -67,6 +72,7 @@ class ParadaResumen {
       cuotasAtrasadasCount: cuotasAtrasadasCount,
       docsPorVencerCount: docsPorVencerCount,
       conductoresActivosCount: conductoresActivosCount ?? this.conductoresActivosCount,
+      resolucionNumero: resolucionNumero,
     );
   }
 
@@ -78,6 +84,7 @@ class ParadaResumen {
       cuotasAtrasadasCount:
           (map['cuotas_atrasadas_count'] as num?)?.toInt() ?? 0,
       docsPorVencerCount: (map['docs_por_vencer_count'] as num?)?.toInt() ?? 0,
+      resolucionNumero: map['resolucion_numero'] as String?,
     );
   }
 }

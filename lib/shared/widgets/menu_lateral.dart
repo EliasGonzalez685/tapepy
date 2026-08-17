@@ -185,6 +185,13 @@ class MenuLateral extends StatelessWidget {
                         );
                       },
                     ),
+                  if (itemsExtra.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    ...itemsExtra,
+                  ],
+                  // Al final de todo: esto es material de consulta, no
+                  // funciones del día a día — lo importante (paradas,
+                  // listados, etc., que llega vía itemsExtra) va primero.
                   const Divider(height: 24),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
@@ -244,10 +251,6 @@ class MenuLateral extends StatelessWidget {
                       );
                     },
                   ),
-                  if (itemsExtra.isNotEmpty) ...[
-                    const Divider(height: 24),
-                    ...itemsExtra,
-                  ],
                 ],
               ),
             ),

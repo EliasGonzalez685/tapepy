@@ -27,6 +27,25 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _mostrarOlvidasteContrasena() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Olvidaste tu contraseña?'),
+        content: const Text(
+          'Contactá al presidente de tu asociación o al responsable de la '
+          'plataforma para que te ayuden a restablecerla.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -149,6 +168,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                       onFieldSubmitted: (_) => _submit(),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _loading ? null : _mostrarOlvidasteContrasena,
+                        child: const Text('¿Olvidaste tu contraseña?'),
+                      ),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 16),

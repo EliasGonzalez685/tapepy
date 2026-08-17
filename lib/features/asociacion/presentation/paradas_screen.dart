@@ -91,6 +91,19 @@ class _ParadasScreenState extends State<ParadasScreen> {
     }
   }
 
+  Future<void> _editarResolucion(ParadaResumen parada) async {
+    final editado = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _EditarResolucionParadaSheet(
+        paradaId: parada.id,
+        paradaNombre: parada.nombre,
+        resolucionActual: parada.resolucionNumero,
+      ),
+    );
+    if (editado == true) _refrescar();
+  }
+
   Future<void> _asignarPresidente(ParadaResumen parada, PresidenteParadaItem? actual) async {
     final asignado = await showModalBottomSheet<bool>(
       context: context,
@@ -252,6 +265,45 @@ class _ParadasScreenState extends State<ParadasScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.gavel_outlined,
+                              size: 18,
+                              color: parada.resolucionNumero != null
+                                  ? AppTheme.rojoInstitucional
+                                  : Colors.grey.shade500,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                parada.resolucionNumero != null
+                                    ? 'Resolución Nº ${parada.resolucionNumero}'
+                                    : 'Sin resolución de parada cargada',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: parada.resolucionNumero != null
+                                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                                          : Colors.grey.shade500,
+                                      fontStyle: parada.resolucionNumero != null
+                                          ? FontStyle.normal
+                                          : FontStyle.italic,
+                                    ),
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _editarResolucion(parada),
+                              icon: Icon(
+                                parada.resolucionNumero != null ? Icons.edit_outlined : Icons.add,
+                                size: 18,
+                              ),
+                              label: Text(parada.resolucionNumero != null ? 'Editar' : 'Cargar'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppTheme.rojoInstitucional,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -279,6 +331,7 @@ class _NuevaParadaSheetState extends State<_NuevaParadaSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
   final _ubicacionController = TextEditingController();
+  final _resolucionController = TextEditingController();
   final _service = AsociacionDashboardService();
   bool _guardando = false;
   String? _error;
@@ -287,6 +340,7 @@ class _NuevaParadaSheetState extends State<_NuevaParadaSheet> {
   void dispose() {
     _nombreController.dispose();
     _ubicacionController.dispose();
+    _resolucionController.dispose();
     super.dispose();
   }
 
@@ -301,6 +355,7 @@ class _NuevaParadaSheetState extends State<_NuevaParadaSheet> {
         organizacionId: widget.organizacionId,
         nombre: _nombreController.text.trim(),
         ubicacion: _ubicacionController.text,
+        resolucionNumero: _resolucionController.text,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -350,6 +405,15 @@ class _NuevaParadaSheetState extends State<_NuevaParadaSheet> {
               controller: _ubicacionController,
               decoration: const InputDecoration(
                 labelText: 'Ubicación (opcional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _resolucionController,
+              decoration: const InputDecoration(
+                labelText: 'Resolución Nº de la parada (opcional)',
+                hintText: 'Ej: 244/15',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -527,6 +591,112 @@ class _AsignarPresidenteSheetState extends State<_AsignarPresidenteSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Resolución Nº de LA PARADA — distinta de la resolución individual de
+/// cada socio (esa se edita desde Datos personales). Puede quedar vacía
+/// y cargarse más adelante.
+class _EditarResolucionParadaSheet extends StatefulWidget {
+  final String paradaId;
+  final String paradaNombre;
+  final String? resolucionActual;
+
+  const _EditarResolucionParadaSheet({
+    required this.paradaId,
+    required this.paradaNombre,
+    this.resolucionActual,
+  });
+
+  @override
+  State<_EditarResolucionParadaSheet> createState() => _EditarResolucionParadaSheetState();
+}
+
+class _EditarResolucionParadaSheetState extends State<_EditarResolucionParadaSheet> {
+  late final _resolucionController = TextEditingController(text: widget.resolucionActual);
+  final _service = AsociacionDashboardService();
+  bool _guardando = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _resolucionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _guardar() async {
+    setState(() {
+      _guardando = true;
+      _error = null;
+    });
+    try {
+      await _service.actualizarResolucionParada(
+        paradaId: widget.paradaId,
+        resolucionNumero: _resolucionController.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudo guardar. Intentá de nuevo.');
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Resolución Nº de ${widget.paradaNombre}',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Es la resolución de la parada, distinta de la resolución individual de cada conductor.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _resolucionController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Resolución Nº',
+              hintText: 'Ej: 244/15',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: _guardando ? null : _guardar,
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
+            child: _guardando
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Guardar'),
+          ),
+        ],
+      ),
     );
   }
 }

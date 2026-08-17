@@ -96,12 +96,27 @@ class AsociacionDashboardService {
     required String organizacionId,
     required String nombre,
     String? ubicacion,
+    String? resolucionNumero,
   }) async {
     await _client.from('paradas').insert({
       'organizacion_id': organizacionId,
       'nombre': nombre,
       'ubicacion': (ubicacion == null || ubicacion.trim().isEmpty) ? null : ubicacion.trim(),
+      'resolucion_numero':
+          (resolucionNumero == null || resolucionNumero.trim().isEmpty) ? null : resolucionNumero.trim(),
     });
+  }
+
+  /// La resolución de la parada puede cargarse después de crearla, o
+  /// corregirse más adelante — no hace falta tenerla desde el alta.
+  Future<void> actualizarResolucionParada({
+    required String paradaId,
+    String? resolucionNumero,
+  }) async {
+    await _client.from('paradas').update({
+      'resolucion_numero':
+          (resolucionNumero == null || resolucionNumero.trim().isEmpty) ? null : resolucionNumero.trim(),
+    }).eq('id', paradaId);
   }
 
   /// Listado de paradas con su cantidad de conductores, para la

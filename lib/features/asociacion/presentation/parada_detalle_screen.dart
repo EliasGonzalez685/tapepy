@@ -599,7 +599,7 @@ class _SeccionConductores extends StatelessWidget {
                     if (item.resolucionNumero != null) ...[
                       const SizedBox(height: 2),
                       Text(
-                        'Resolución Nº ${item.resolucionNumero}',
+                        'Resolución Nº (socio) ${item.resolucionNumero}',
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall

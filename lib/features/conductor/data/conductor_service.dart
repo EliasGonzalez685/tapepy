@@ -42,7 +42,6 @@ class VehiculoInfo {
   final int? anio;
   final String? chapa;
   final String? color;
-  final String? resolucionNumero;
   final String? fotoFrenteChapa;
   final String? fotoLejos;
   // Si este vehículo entra o no en los listados imprimibles — un
@@ -58,7 +57,6 @@ class VehiculoInfo {
     this.anio,
     this.chapa,
     this.color,
-    this.resolucionNumero,
     this.fotoFrenteChapa,
     this.fotoLejos,
     this.incluirEnListado = true,
@@ -74,7 +72,6 @@ class VehiculoInfo {
       anio: anio,
       chapa: chapa,
       color: color,
-      resolucionNumero: resolucionNumero,
       fotoFrenteChapa: fotoFrenteChapa,
       fotoLejos: fotoLejos,
       incluirEnListado: incluirEnListado ?? this.incluirEnListado,
@@ -89,7 +86,6 @@ class VehiculoInfo {
       anio: (map['anio'] as num?)?.toInt(),
       chapa: map['chapa'] as String?,
       color: map['color'] as String?,
-      resolucionNumero: map['resolucion_numero'] as String?,
       fotoFrenteChapa: map['foto_frente_chapa'] as String?,
       fotoLejos: map['foto_lejos'] as String?,
       incluirEnListado: map['incluir_en_listado'] as bool? ?? true,
@@ -237,7 +233,7 @@ class ConductorService {
     final rows = await _client
         .from('conductores')
         .select(
-            'id, organizacion_id, turno, parada_id, paradas(nombre), vehiculos(id, marca, modelo, anio, chapa, color, resolucion_numero, foto_frente_chapa, foto_lejos, incluir_en_listado)')
+            'id, organizacion_id, turno, parada_id, paradas(nombre), vehiculos(id, marca, modelo, anio, chapa, color, foto_frente_chapa, foto_lejos, incluir_en_listado)')
         .eq('usuario_id', usuarioId)
         .limit(1);
 
@@ -307,7 +303,6 @@ class ConductorService {
     int? anio,
     String? chapa,
     String? color,
-    String? resolucionNumero,
   }) async {
     await _client.from('vehiculos').update({
       'marca': marca,
@@ -315,7 +310,6 @@ class ConductorService {
       'anio': anio,
       'chapa': chapa,
       'color': color,
-      'resolucion_numero': resolucionNumero,
     }).eq('id', vehiculoId);
   }
 

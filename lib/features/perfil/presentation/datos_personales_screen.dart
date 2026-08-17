@@ -8,11 +8,12 @@ import '../data/perfil_service.dart';
 import 'cambiar_contrasena_screen.dart';
 
 /// Datos personales del usuario logueado: nombre, teléfono, cédula y
-/// N° de socio se pueden editar acá mismo (vale para cualquier rol:
-/// conductor, presidente de parada o de asociación — ver
-/// PerfilService.actualizarDatosPersonales). Solo el email queda fuera,
-/// por estar atado a la cuenta de Supabase Auth. La foto se sube/cambia
-/// desde acá también.
+/// Resolución Nº individual se pueden editar acá mismo (vale para
+/// cualquier rol: conductor, presidente de parada o de asociación — ver
+/// PerfilService.actualizarDatosPersonales). No hace falta cargar la
+/// Resolución Nº al registrarse, se completa después desde acá. Solo el
+/// email queda fuera, por estar atado a la cuenta de Supabase Auth. La
+/// foto se sube/cambia desde acá también.
 class DatosPersonalesScreen extends StatefulWidget {
   final Usuario usuario;
   const DatosPersonalesScreen({super.key, required this.usuario});
@@ -31,7 +32,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
   late String _nombre;
   String? _telefono;
   String? _cedula;
-  String? _numeroSocio;
+  String? _resolucionIndividual;
 
   @override
   void initState() {
@@ -41,7 +42,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
     _nombre = widget.usuario.nombre;
     _telefono = widget.usuario.telefono;
     _cedula = widget.usuario.cedula;
-    _numeroSocio = widget.usuario.numeroSocio;
+    _resolucionIndividual = widget.usuario.resolucionIndividual;
   }
 
   Future<void> _editarDatos() async {
@@ -52,7 +53,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
         nombre: _nombre,
         telefono: _telefono,
         cedula: _cedula,
-        numeroSocio: _numeroSocio,
+        resolucionIndividual: _resolucionIndividual,
       ),
     );
     if (resultado == null) return;
@@ -61,13 +62,13 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
       nombre: _nombre,
       telefono: _telefono,
       cedula: _cedula,
-      numeroSocio: _numeroSocio,
+      resolucionIndividual: _resolucionIndividual,
     );
     setState(() {
       _nombre = resultado.nombre;
       _telefono = resultado.telefono;
       _cedula = resultado.cedula;
-      _numeroSocio = resultado.numeroSocio;
+      _resolucionIndividual = resultado.resolucionIndividual;
     });
     try {
       await _perfilService.actualizarDatosPersonales(
@@ -75,7 +76,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
         nombre: resultado.nombre,
         telefono: resultado.telefono,
         cedula: resultado.cedula,
-        numeroSocio: resultado.numeroSocio,
+        resolucionIndividual: resultado.resolucionIndividual,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -86,7 +87,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
         _nombre = anteriores.nombre;
         _telefono = anteriores.telefono;
         _cedula = anteriores.cedula;
-        _numeroSocio = anteriores.numeroSocio;
+        _resolucionIndividual = anteriores.resolucionIndividual;
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -256,9 +257,9 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
                 _CampoInfo(icono: Icons.badge_outlined, etiqueta: 'Cédula', valor: _cedula),
                 const Divider(height: 1),
                 _CampoInfo(
-                    icono: Icons.confirmation_number_outlined,
-                    etiqueta: 'N° de socio',
-                    valor: _numeroSocio),
+                    icono: Icons.gavel_outlined,
+                    etiqueta: 'Resolución Nº',
+                    valor: _resolucionIndividual),
               ],
             ),
           ),
@@ -341,23 +342,23 @@ class _DatosEditados {
   final String nombre;
   final String? telefono;
   final String? cedula;
-  final String? numeroSocio;
-  const _DatosEditados({required this.nombre, this.telefono, this.cedula, this.numeroSocio});
+  final String? resolucionIndividual;
+  const _DatosEditados({required this.nombre, this.telefono, this.cedula, this.resolucionIndividual});
 }
 
-/// Formulario para editar nombre, teléfono, cédula y N° de socio —
-/// disponible para cualquier rol. Email no se toca acá (ver
-/// PerfilService.actualizarDatosPersonales).
+/// Formulario para editar nombre, teléfono, cédula y Resolución Nº
+/// individual — disponible para cualquier rol. Email no se toca acá
+/// (ver PerfilService.actualizarDatosPersonales).
 class _EditarDatosSheet extends StatefulWidget {
   final String nombre;
   final String? telefono;
   final String? cedula;
-  final String? numeroSocio;
+  final String? resolucionIndividual;
   const _EditarDatosSheet({
     required this.nombre,
     this.telefono,
     this.cedula,
-    this.numeroSocio,
+    this.resolucionIndividual,
   });
 
   @override
@@ -369,14 +370,14 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
   late final _nombreController = TextEditingController(text: widget.nombre);
   late final _telefonoController = TextEditingController(text: widget.telefono ?? '');
   late final _cedulaController = TextEditingController(text: widget.cedula ?? '');
-  late final _numeroSocioController = TextEditingController(text: widget.numeroSocio ?? '');
+  late final _resolucionIndividualController = TextEditingController(text: widget.resolucionIndividual ?? '');
 
   @override
   void dispose() {
     _nombreController.dispose();
     _telefonoController.dispose();
     _cedulaController.dispose();
-    _numeroSocioController.dispose();
+    _resolucionIndividualController.dispose();
     super.dispose();
   }
 
@@ -386,7 +387,7 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
       nombre: _nombreController.text.trim(),
       telefono: _telefonoController.text,
       cedula: _cedulaController.text,
-      numeroSocio: _numeroSocioController.text,
+      resolucionIndividual: _resolucionIndividualController.text,
     ));
   }
 
@@ -440,9 +441,9 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
             ),
             const SizedBox(height: 16),
             TextFormField(
-              controller: _numeroSocioController,
+              controller: _resolucionIndividualController,
               decoration: const InputDecoration(
-                labelText: 'N° de socio',
+                labelText: 'Resolución Nº',
                 border: OutlineInputBorder(),
               ),
             ),

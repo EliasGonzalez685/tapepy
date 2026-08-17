@@ -237,8 +237,6 @@ class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
   late final _anioController = TextEditingController(text: widget.vehiculo?.anio?.toString() ?? '');
   late final _chapaController = TextEditingController(text: widget.vehiculo?.chapa ?? '');
   late final _colorController = TextEditingController(text: widget.vehiculo?.color ?? '');
-  late final _resolucionController =
-      TextEditingController(text: widget.vehiculo?.resolucionNumero ?? '');
 
   bool _guardando = false;
   VehiculoFotoSlot? _subiendoSlot;
@@ -276,7 +274,6 @@ class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
     _anioController.dispose();
     _chapaController.dispose();
     _colorController.dispose();
-    _resolucionController.dispose();
     super.dispose();
   }
 
@@ -292,8 +289,6 @@ class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
         anio: int.tryParse(_anioController.text.trim()),
         chapa: _chapaController.text.trim().isEmpty ? null : _chapaController.text.trim(),
         color: _colorController.text.trim().isEmpty ? null : _colorController.text.trim(),
-        resolucionNumero:
-            _resolucionController.text.trim().isEmpty ? null : _resolucionController.text.trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -442,15 +437,6 @@ class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
                     controller: _colorController,
                     decoration:
                         const InputDecoration(labelText: 'Color', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _resolucionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Resolución Nº',
-                      hintText: 'Ej: 244/15',
-                      border: OutlineInputBorder(),
-                    ),
                   ),
                   const SizedBox(height: 28),
                   Row(

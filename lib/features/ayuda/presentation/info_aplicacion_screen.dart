@@ -38,11 +38,11 @@ class InfoAplicacionScreen extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           const Text(
-            'TapePy es una plataforma de gestión para asociaciones de transporte '
-            '(mototaxistas, remiseros y similares). Permite registrar socios y sus '
-            'vehículos, cargar y verificar documentación, generar carnets digitales '
-            'y constancias, administrar el cobro de cuotas, comunicarse '
-            'internamente y generar listados oficiales.',
+            'TapePy es una plataforma de gestión para asociaciones de transporte. '
+            'Permite registrar socios y sus vehículos, cargar y verificar '
+            'documentación, generar carnets digitales y constancias, administrar '
+            'el cobro de cuotas, comunicarse internamente y generar listados '
+            'oficiales.',
             style: TextStyle(height: 1.5),
           ),
           const SizedBox(height: 16),

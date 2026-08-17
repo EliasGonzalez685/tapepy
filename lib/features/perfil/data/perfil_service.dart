@@ -11,7 +11,6 @@ class CarnetData {
   final String rolLabel;
   final String? cedula;
   final String? telefono;
-  final String? resolucionIndividual;
   final String? fotoPerfilUrl;
   final String organizacionNombre;
   final String qrToken;
@@ -28,7 +27,6 @@ class CarnetData {
     required this.vencimiento,
     this.cedula,
     this.telefono,
-    this.resolucionIndividual,
     this.fotoPerfilUrl,
   });
 }
@@ -119,7 +117,7 @@ class PerfilService {
   Future<CarnetData> cargarDatosCarnet(String usuarioId) async {
     final row = await _client
         .from('usuarios')
-        .select('id, nombre, rol, resolucion_individual, cedula, telefono, foto_perfil_url, '
+        .select('id, nombre, rol, cedula, telefono, foto_perfil_url, '
             'qr_token, carnet_vencimiento, organizaciones(nombre)')
         .eq('id', usuarioId)
         .single();
@@ -157,7 +155,6 @@ class PerfilService {
       rolLabel: _labelRol(row['rol'] as String),
       cedula: row['cedula'] as String?,
       telefono: row['telefono'] as String?,
-      resolucionIndividual: row['resolucion_individual'] as String?,
       fotoPerfilUrl: row['foto_perfil_url'] as String?,
       organizacionNombre: organizacion?['nombre'] as String? ?? 'Traude',
       qrToken: qrToken,

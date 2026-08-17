@@ -365,7 +365,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
 
     return [
       _SeccionListado(
-        subtitulo: nombreParada != null ? 'PARADA Nº $nombreParada' : null,
+        subtitulo: nombreParada != null ? 'PARADA Nº ${_tituloParada(nombreParada)}' : null,
         items: items,
         firmaPropiaBytes: firmaPropiaBytes,
         cargoPropio: firmaPropiaBytes != null ? _cargoPropio : null,
@@ -433,7 +433,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
       }
 
       secciones.add(_SeccionListado(
-        subtitulo: 'PARADA Nº $nombreParada',
+        subtitulo: 'PARADA Nº ${_tituloParada(nombreParada)}',
         items: itemsParada,
         firmaPropiaBytes: firmaAsociacionBytes,
         cargoPropio: cargoAsociacion,
@@ -444,6 +444,16 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
       ));
     }
     return secciones;
+  }
+
+  /// Muchos nombres de parada ya arrancan con la palabra "Parada" (p.
+  /// ej. "Parada Km 7", "Parada Microcentro"), así que anteponer
+  /// "PARADA Nº" tal cual duplicaba la palabra en el título del PDF
+  /// ("PARADA Nº PARADA KM 7"). Acá se saca ese prefijo redundante antes
+  /// de armar el subtítulo -- si el nombre no lo tiene, queda igual.
+  String _tituloParada(String nombreParada) {
+    final sinPrefijo = nombreParada.replaceFirst(RegExp(r'^parada\s+', caseSensitive: false), '').trim();
+    return sinPrefijo.isEmpty ? nombreParada : sinPrefijo;
   }
 
   Future<Uint8List?> _descargarFirma(String path) async {

@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -12,7 +11,6 @@ import '../../../shared/models/usuario.dart';
 import '../../../shared/models/user_role.dart';
 import '../../../shared/utils/firma_cargo.dart';
 import '../../firma/data/firma_service.dart';
-import '../../firma/presentation/mi_firma_screen.dart';
 import '../data/parada_detalle_service.dart';
 
 /// Qué dato puede sumar el presidente al listado imprimible. `firma` no
@@ -110,8 +108,9 @@ extension on _Columna {
 /// pedidos por Elias: el presidente de una parada imprime solo la suya
 /// (pasa [paradaId] + [paradaNombre]) y el presidente de asociación
 /// imprime todas juntas (no pasa ninguno de los dos). [usuario] hace
-/// falta para saber de quién es "la propia" firma y a quién pedirle "la
-/// otra".
+/// falta para saber de quién es "la propia" firma (cargo + nombre, sin
+/// imagen) y quién es "el otro" presidente para imprimir su cargo +
+/// nombre también.
 class ImprimirListadoScreen extends StatefulWidget {
   final String? paradaId;
   final String? paradaNombre;
@@ -142,18 +141,18 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   Set<ConductorListadoItem>? _seleccionados;
   String? _paradaFiltro; // null = todas las paradas juntas
 
-  // --- Firmas ---
-  bool _cargandoFirmas = false;
-  bool _solicitandoFirma = false;
+  // --- Firma a mano: no hace falta una imagen digital subida, solo
+  // dejar el cargo + nombre impresos con un espacio en blanco arriba
+  // para que la persona firme físicamente después de imprimir (pedido
+  // de Elias, 2026-08-17). Solo hace falta saber QUIÉN es el otro
+  // presidente (id + nombre), no si tiene una firma digital cargada.
+  bool _cargandoOtroPresidente = false;
   String? _organizacionNombre;
-  String? _miFirmaPath;
-  bool _incluirMiFirma = false;
+  bool _incluirFirmaPropia = true;
   String? _paradaIdConsultada; // para no volver a pedir si no cambió el alcance
   String? _otroPresidenteId;
   String? _otroPresidenteNombre;
-  String? _otroFirmaPath;
-  EstadoFirma _estadoOtraFirma = EstadoFirma.ninguna;
-  bool _incluirOtraFirma = false;
+  bool _incluirFirmaOtro = true;
 
   String get _otroRolLabel =>
       widget.usuario.rol == UserRole.presidenteAsociacion ? 'Presidente de Parada' : 'Presidente de Asociación';
@@ -228,21 +227,21 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   void _actualizarFirmasSiHizoFalta() {
     final paradaId = _paradaIdActual;
     if (paradaId == _paradaIdConsultada) return;
-    _cargarFirmas();
+    _cargarOtroPresidente();
   }
 
-  Future<void> _cargarFirmas() async {
+  /// Solo averigua QUIÉN es el otro presidente (id + nombre) para poder
+  /// imprimir su cargo debajo del espacio en blanco de firma -- no hace
+  /// falta que tenga una firma digital cargada ni aprobada, eso ya no
+  /// aplica acá.
+  Future<void> _cargarOtroPresidente() async {
     final usuario = widget.usuario;
     final paradaId = _paradaIdActual;
     _paradaIdConsultada = paradaId;
-    setState(() => _cargandoFirmas = true);
+    setState(() => _cargandoOtroPresidente = true);
     try {
-      final firmaPropia = await _firmaService.cargarFirmaUrl(usuario.id);
-
       String? otroId;
       String? otroNombre;
-      String? otroFirma;
-      var estado = EstadoFirma.ninguna;
 
       if (paradaId != null) {
         if (usuario.rol == UserRole.presidenteAsociacion) {
@@ -252,56 +251,17 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         }
         if (otroId != null) {
           otroNombre = await _firmaService.cargarNombreUsuario(otroId);
-          estado = await _firmaService.consultarEstado(
-            solicitanteId: usuario.id,
-            firmanteId: otroId,
-            paradaId: paradaId,
-          );
-          if (estado == EstadoFirma.aprobada) {
-            otroFirma = await _firmaService.cargarFirmaUrl(otroId);
-          }
         }
       }
 
       if (!mounted || paradaId != _paradaIdConsultada) return;
       setState(() {
-        _miFirmaPath = firmaPropia;
-        _incluirMiFirma = firmaPropia != null;
         _otroPresidenteId = otroId;
         _otroPresidenteNombre = otroNombre;
-        _estadoOtraFirma = estado;
-        _otroFirmaPath = otroFirma;
-        _incluirOtraFirma = estado == EstadoFirma.aprobada && otroFirma != null;
+        _incluirFirmaOtro = otroNombre != null;
       });
     } finally {
-      if (mounted) setState(() => _cargandoFirmas = false);
-    }
-  }
-
-  Future<void> _solicitarOtraFirma() async {
-    final usuario = widget.usuario;
-    final paradaId = _paradaIdActual;
-    final firmanteId = _otroPresidenteId;
-    if (paradaId == null || firmanteId == null || usuario.organizacionId == null) return;
-    setState(() => _solicitandoFirma = true);
-    try {
-      await _firmaService.solicitarFirma(
-        organizacionId: usuario.organizacionId!,
-        paradaId: paradaId,
-        solicitanteId: usuario.id,
-        firmanteId: firmanteId,
-      );
-      if (!mounted) return;
-      setState(() => _estadoOtraFirma = EstadoFirma.pendiente);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Se envió la solicitud de firma al $_otroRolLabel')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('No se pudo enviar la solicitud. Intentá de nuevo.')));
-    } finally {
-      if (mounted) setState(() => _solicitandoFirma = false);
+      if (mounted) setState(() => _cargandoOtroPresidente = false);
     }
   }
 
@@ -312,7 +272,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
     _future = widget._todasLasParadas
         ? _service.cargarListadoConductoresOrganizacion(organizacionId: widget.usuario.organizacionId)
         : _service.cargarListadoConductores(widget.paradaId!);
-    _cargarFirmas();
+    _cargarOtroPresidente();
     _cargarOrganizacion();
   }
 
@@ -355,28 +315,19 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   /// Un único listado -- ya sea de una sola parada (o la que sea que el
   /// presidente de parada tiene asignada) o de "todas las paradas"
   /// juntas en una misma tabla (sin separar por hoja, ver _modoBulk).
+  /// El bloque de firma es solo cargo + nombre impresos (ver
+  /// _construirPdf) -- no depende de ninguna firma digital cargada.
   Future<List<_SeccionListado>> _construirSeccionUnica(List<ConductorListadoItem> items) async {
     final nombreParada = widget._todasLasParadas ? _paradaFiltro : widget.paradaNombre;
-
-    Uint8List? firmaPropiaBytes;
-    if (_incluirMiFirma && _miFirmaPath != null) {
-      firmaPropiaBytes = await _descargarFirma(_miFirmaPath!);
-    }
-    Uint8List? firmaOtraBytes;
-    if (_incluirOtraFirma && _otroFirmaPath != null) {
-      firmaOtraBytes = await _descargarFirma(_otroFirmaPath!);
-    }
 
     return [
       _SeccionListado(
         subtitulo: nombreParada != null ? 'PARADA Nº ${_tituloParada(nombreParada)}' : null,
         items: items,
-        firmaPropiaBytes: firmaPropiaBytes,
-        cargoPropio: firmaPropiaBytes != null ? _cargoPropio : null,
-        nombrePropio: firmaPropiaBytes != null ? widget.usuario.nombre : null,
-        firmaOtraBytes: firmaOtraBytes,
-        cargoOtro: firmaOtraBytes != null ? _cargoOtro : null,
-        nombreOtro: firmaOtraBytes != null ? _otroPresidenteNombre : null,
+        cargoPropio: _incluirFirmaPropia ? _cargoPropio : null,
+        nombrePropio: _incluirFirmaPropia ? widget.usuario.nombre : null,
+        cargoOtro: (_incluirFirmaOtro && _otroPresidenteNombre != null) ? _cargoOtro : null,
+        nombreOtro: (_incluirFirmaOtro && _otroPresidenteNombre != null) ? _otroPresidenteNombre : null,
       ),
     ];
   }
@@ -389,17 +340,6 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   String _tituloParada(String nombreParada) {
     final sinPrefijo = nombreParada.replaceFirst(RegExp(r'^parada\s+', caseSensitive: false), '').trim();
     return sinPrefijo.isEmpty ? nombreParada : sinPrefijo;
-  }
-
-  Future<Uint8List?> _descargarFirma(String path) async {
-    try {
-      final url = await _firmaService.obtenerUrlFirmada(path);
-      final respuesta = await http.get(Uri.parse(url));
-      if (respuesta.statusCode == 200) return respuesta.bodyBytes;
-    } catch (_) {
-      // Si falla la descarga, el PDF se genera igual sin esa firma.
-    }
-    return null;
   }
 
   @override
@@ -483,37 +423,29 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
               ),
               const SizedBox(height: 24),
               Text('Firmas a incluir', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              Text(
+                'No hace falta firma digital: se imprime el cargo y el nombre con un espacio en blanco arriba '
+                'para firmar a mano después de imprimir.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
               const SizedBox(height: 8),
               _SeccionFirmas(
-                  cargando: _cargandoFirmas,
-                  solicitando: _solicitandoFirma,
-                  miFirmaDisponible: _miFirmaPath != null,
-                  miRolLabel: widget.usuario.rol.label,
-                  incluirMiFirma: _incluirMiFirma,
-                  onCambiarMiFirma: _miFirmaPath == null
-                      ? null
-                      : (valor) => setState(() => _incluirMiFirma = valor),
-                  onIrASubirFirma: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => MiFirmaScreen(usuario: widget.usuario)),
-                    );
-                    // Forzamos un refetch aunque el alcance (parada) no
-                    // haya cambiado, porque lo que cambió es la firma
-                    // propia.
-                    setState(() => _paradaIdConsultada = null);
-                    _cargarFirmas();
-                  },
-                  haySolaParada: _paradaIdActual != null,
-                  otroRolLabel: _otroRolLabel,
-                  otroPresidenteAsignado: _otroPresidenteId != null,
-                  estadoOtraFirma: _estadoOtraFirma,
-                  otroFirmaDisponible: _otroFirmaPath != null,
-                  incluirOtraFirma: _incluirOtraFirma,
-                  onCambiarOtraFirma: (_estadoOtraFirma == EstadoFirma.aprobada && _otroFirmaPath != null)
-                      ? (valor) => setState(() => _incluirOtraFirma = valor)
-                      : null,
-                  onSolicitarOtraFirma: _solicitarOtraFirma,
-                ),
+                cargandoOtro: _cargandoOtroPresidente,
+                miRolLabel: widget.usuario.rol.label,
+                incluirMiFirma: _incluirFirmaPropia,
+                onCambiarMiFirma: (valor) => setState(() => _incluirFirmaPropia = valor),
+                haySolaParada: _paradaIdActual != null,
+                otroRolLabel: _otroRolLabel,
+                otroPresidenteNombre: _otroPresidenteNombre,
+                incluirOtraFirma: _incluirFirmaOtro,
+                onCambiarOtraFirma: _otroPresidenteNombre == null
+                    ? null
+                    : (valor) => setState(() => _incluirFirmaOtro = valor),
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -607,42 +539,32 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   }
 }
 
-/// Bloque de selección de firmas: la propia (directa, si ya la subió) y
-/// la del otro presidente (directa si ya está aprobada, con botón de
-/// solicitud si todavía no).
+/// Bloque de selección de firmas a mano: dos casillas, la propia (mi
+/// cargo + mi nombre) y la del otro presidente (su cargo + su nombre,
+/// si ya sabemos quién es) -- se puede tildar una, la otra, ambas o
+/// ninguna. No depende de ninguna firma digital cargada; el PDF deja el
+/// espacio en blanco para firmar a mano (ver _construirPdf/bloqueFirma).
 class _SeccionFirmas extends StatelessWidget {
-  final bool cargando;
-  final bool solicitando;
-  final bool miFirmaDisponible;
+  final bool cargandoOtro;
   final String miRolLabel;
   final bool incluirMiFirma;
-  final ValueChanged<bool>? onCambiarMiFirma;
-  final VoidCallback onIrASubirFirma;
+  final ValueChanged<bool> onCambiarMiFirma;
   final bool haySolaParada;
   final String otroRolLabel;
-  final bool otroPresidenteAsignado;
-  final EstadoFirma estadoOtraFirma;
-  final bool otroFirmaDisponible;
+  final String? otroPresidenteNombre;
   final bool incluirOtraFirma;
   final ValueChanged<bool>? onCambiarOtraFirma;
-  final VoidCallback onSolicitarOtraFirma;
 
   const _SeccionFirmas({
-    required this.cargando,
-    required this.solicitando,
-    required this.miFirmaDisponible,
+    required this.cargandoOtro,
     required this.miRolLabel,
     required this.incluirMiFirma,
     required this.onCambiarMiFirma,
-    required this.onIrASubirFirma,
     required this.haySolaParada,
     required this.otroRolLabel,
-    required this.otroPresidenteAsignado,
-    required this.estadoOtraFirma,
-    required this.otroFirmaDisponible,
+    required this.otroPresidenteNombre,
     required this.incluirOtraFirma,
     required this.onCambiarOtraFirma,
-    required this.onSolicitarOtraFirma,
   });
 
   @override
@@ -659,15 +581,14 @@ class _SeccionFirmas extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _BloqueMiFirma(
-              disponible: miFirmaDisponible,
-              rolLabel: miRolLabel,
-              incluir: incluirMiFirma,
-              onCambiar: onCambiarMiFirma,
-              onIrASubir: onIrASubirFirma,
+            CheckboxListTile(
+              value: incluirMiFirma,
+              activeColor: AppTheme.rojoInstitucional,
+              title: Text('Mi firma ($miRolLabel)'),
+              onChanged: (v) => onCambiarMiFirma(v ?? false),
             ),
             const Divider(height: 1),
-            if (cargando)
+            if (cargandoOtro)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Center(
@@ -682,85 +603,22 @@ class _SeccionFirmas extends StatelessWidget {
                   style: subtextStyle,
                 ),
               )
-            else if (!otroPresidenteAsignado)
+            else if (otroPresidenteNombre == null)
               Padding(
                 padding: const EdgeInsets.all(14),
                 child: Text('Todavía no hay $otroRolLabel asignado.', style: subtextStyle),
               )
             else
-              switch (estadoOtraFirma) {
-                EstadoFirma.aprobada when otroFirmaDisponible => CheckboxListTile(
-                    value: incluirOtraFirma,
-                    activeColor: AppTheme.rojoInstitucional,
-                    title: Text('Firma del $otroRolLabel'),
-                    subtitle: const Text('Autorizada'),
-                    onChanged: onCambiarOtraFirma == null ? null : (v) => onCambiarOtraFirma!(v ?? false),
-                  ),
-                EstadoFirma.aprobada => Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Text('El $otroRolLabel todavía no subió su firma.', style: subtextStyle),
-                  ),
-                EstadoFirma.pendiente => ListTile(
-                    leading: const Icon(Icons.hourglass_top_outlined, color: Colors.orange),
-                    title: Text('Firma del $otroRolLabel'),
-                    subtitle: const Text('Solicitud pendiente de aprobación'),
-                  ),
-                EstadoFirma.rechazada => ListTile(
-                    leading: Icon(Icons.block_outlined, color: Theme.of(context).colorScheme.error),
-                    title: Text('Firma del $otroRolLabel'),
-                    subtitle: const Text('Solicitud rechazada'),
-                    trailing: solicitando
-                        ? const SizedBox(
-                            width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : TextButton(onPressed: onSolicitarOtraFirma, child: const Text('Reintentar')),
-                  ),
-                EstadoFirma.ninguna => ListTile(
-                    leading: const Icon(Icons.draw_outlined),
-                    title: Text('Firma del $otroRolLabel'),
-                    trailing: solicitando
-                        ? const SizedBox(
-                            width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : TextButton(onPressed: onSolicitarOtraFirma, child: const Text('Solicitar')),
-                  ),
-              },
+              CheckboxListTile(
+                value: incluirOtraFirma,
+                activeColor: AppTheme.rojoInstitucional,
+                title: Text('Firma del $otroRolLabel'),
+                subtitle: Text(otroPresidenteNombre!),
+                onChanged: onCambiarOtraFirma == null ? null : (v) => onCambiarOtraFirma!(v ?? false),
+              ),
           ],
         ),
       ),
-    );
-  }
-}
-
-/// El bloque "mi firma" es igual en el modo de una sola parada y en el
-/// modo "todas juntas" -- se extrae acá para no duplicarlo.
-class _BloqueMiFirma extends StatelessWidget {
-  final bool disponible;
-  final String rolLabel;
-  final bool incluir;
-  final ValueChanged<bool>? onCambiar;
-  final VoidCallback onIrASubir;
-
-  const _BloqueMiFirma({
-    required this.disponible,
-    required this.rolLabel,
-    required this.incluir,
-    required this.onCambiar,
-    required this.onIrASubir,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (disponible) {
-      return CheckboxListTile(
-        value: incluir,
-        activeColor: AppTheme.rojoInstitucional,
-        title: Text('Mi firma ($rolLabel)'),
-        onChanged: onCambiar == null ? null : (v) => onCambiar!(v ?? false),
-      );
-    }
-    return ListTile(
-      leading: Icon(Icons.draw_outlined, color: Colors.grey.shade400),
-      title: const Text('No subiste tu firma todavía'),
-      trailing: TextButton(onPressed: onIrASubir, child: const Text('Subir')),
     );
   }
 }
@@ -770,23 +628,21 @@ class _BloqueMiFirma extends StatelessWidget {
 /// solo bloque de firma), sea de una parada puntual o de "todas las
 /// paradas" juntas -- ver _modoBulk. _construirPdf igual acepta una
 /// lista por si en el futuro hiciera falta más de una sección.
+/// cargoPropio/cargoOtro son solo texto -- no hay imagen de firma, el
+/// PDF deja un espacio en blanco arriba para firmar a mano.
 class _SeccionListado {
   final String? subtitulo;
   final List<ConductorListadoItem> items;
-  final Uint8List? firmaPropiaBytes;
   final String? cargoPropio;
   final String? nombrePropio;
-  final Uint8List? firmaOtraBytes;
   final String? cargoOtro;
   final String? nombreOtro;
 
   _SeccionListado({
     this.subtitulo,
     required this.items,
-    this.firmaPropiaBytes,
     this.cargoPropio,
     this.nombrePropio,
-    this.firmaOtraBytes,
     this.cargoOtro,
     this.nombreOtro,
   });
@@ -800,7 +656,9 @@ class _SeccionListado {
 /// subtítulo del listado, no repetida en cada fila. Si se eligió la
 /// columna "Firma", esa celda queda en blanco a propósito para que cada
 /// conductor firme a mano después de imprimir. Al final, si se pidió,
-/// un bloque con la(s) firma(s) digital(es) de los presidentes.
+/// un bloque con el cargo y el nombre de cada presidente y un espacio
+/// en blanco arriba para que firme a mano (no hay imagen de firma
+/// digital acá).
 /// ---------------------------------------------------------------------
 
 Future<Uint8List> _construirPdf({
@@ -922,14 +780,12 @@ Future<Uint8List> _construirPdf({
         ],
       );
 
-  pw.Widget bloqueFirma(Uint8List bytes, String cargo, String? nombre) => pw.Column(
+  // Sin imagen: solo un espacio en blanco arriba de la línea para que
+  // la persona firme a mano después de imprimir (pedido de Elias,
+  // 2026-08-17 -- no hace falta la firma digital acá).
+  pw.Widget bloqueFirma(String cargo, String? nombre) => pw.Column(
         children: [
-          pw.Container(
-            height: 55,
-            width: 160,
-            alignment: pw.Alignment.bottomCenter,
-            child: pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain),
-          ),
+          pw.SizedBox(height: 46),
           pw.Container(width: 160, height: 0.8, color: PdfColors.grey700),
           pw.SizedBox(height: 4),
           pw.Text(cargo,
@@ -956,7 +812,7 @@ Future<Uint8List> _construirPdf({
   // membrete una sola vez, sin repetirlo en las páginas siguientes de
   // esa misma sección.
   for (final seccion in secciones) {
-    final tieneFirmas = seccion.firmaPropiaBytes != null || seccion.firmaOtraBytes != null;
+    final tieneFirmas = seccion.cargoPropio != null || seccion.cargoOtro != null;
     int? primeraPaginaSeccion;
     doc.addPage(
       pw.MultiPage(
@@ -975,10 +831,8 @@ Future<Uint8List> _construirPdf({
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
               children: [
-                if (seccion.firmaPropiaBytes != null)
-                  bloqueFirma(seccion.firmaPropiaBytes!, seccion.cargoPropio ?? '', seccion.nombrePropio),
-                if (seccion.firmaOtraBytes != null)
-                  bloqueFirma(seccion.firmaOtraBytes!, seccion.cargoOtro ?? '', seccion.nombreOtro),
+                if (seccion.cargoPropio != null) bloqueFirma(seccion.cargoPropio!, seccion.nombrePropio),
+                if (seccion.cargoOtro != null) bloqueFirma(seccion.cargoOtro!, seccion.nombreOtro),
               ],
             ),
           ],

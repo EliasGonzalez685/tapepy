@@ -149,9 +149,19 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   String? _otroFirmaPath;
   EstadoFirma _estadoOtraFirma = EstadoFirma.ninguna;
   bool _incluirOtraFirma = false;
+  // Solo aplica en modo "todas las paradas juntas": la firma de cada
+  // presidente de parada, una por sección, tomada de aprobaciones que
+  // ya existan (no dispara ningún pedido nuevo -- pedir de a una por
+  // parada se sigue haciendo desde el modo de una sola parada).
+  bool _incluirFirmasParadas = false;
 
   String get _otroRolLabel =>
       widget.usuario.rol == UserRole.presidenteAsociacion ? 'Presidente de Parada' : 'Presidente de Asociación';
+
+  /// "Todas las paradas" sin acotar a una sola: se genera un PDF con un
+  /// listado separado por cada parada (pedido de Elias, 2026-08-17), no
+  /// una tabla única mezclando todo.
+  bool get _modoBulk => widget._todasLasParadas && _paradaFiltro == null;
 
   List<_Columna> get _columnasDisponibles => _Columna.values;
 
@@ -327,20 +337,35 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
     setState(() => _generando = true);
     try {
       final columnas = _columnasDisponibles.where(_seleccionadas.contains).toList();
-      final subtitulo = widget._todasLasParadas ? (_paradaFiltro ?? 'TODAS LAS PARADAS') : widget.paradaNombre;
 
-      Uint8List? firmaPropiaBytes;
-      if (_incluirMiFirma && _miFirmaPath != null) {
-        firmaPropiaBytes = await _descargarFirma(_miFirmaPath!);
-      }
-      Uint8List? firmaOtraBytes;
-      if (_incluirOtraFirma && _otroFirmaPath != null) {
-        firmaOtraBytes = await _descargarFirma(_otroFirmaPath!);
-      }
+      final secciones = _modoBulk
+          ? await _construirSeccionesPorParada(items)
+          : await _construirSeccionUnica(items);
 
-      final bytes = await _construirPdf(
-        subtitulo: subtitulo,
-        columnas: columnas,
+      final bytes = await _construirPdf(secciones: secciones, columnas: columnas);
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'listado_socios.pdf');
+    } finally {
+      if (mounted) setState(() => _generando = false);
+    }
+  }
+
+  /// Una sola parada (o la que sea que el presidente de parada tiene
+  /// asignada): un único listado, igual que siempre.
+  Future<List<_SeccionListado>> _construirSeccionUnica(List<ConductorListadoItem> items) async {
+    final nombreParada = widget._todasLasParadas ? _paradaFiltro : widget.paradaNombre;
+
+    Uint8List? firmaPropiaBytes;
+    if (_incluirMiFirma && _miFirmaPath != null) {
+      firmaPropiaBytes = await _descargarFirma(_miFirmaPath!);
+    }
+    Uint8List? firmaOtraBytes;
+    if (_incluirOtraFirma && _otroFirmaPath != null) {
+      firmaOtraBytes = await _descargarFirma(_otroFirmaPath!);
+    }
+
+    return [
+      _SeccionListado(
+        subtitulo: nombreParada != null ? 'PARADA Nº $nombreParada' : null,
         items: items,
         firmaPropiaBytes: firmaPropiaBytes,
         cargoPropio: firmaPropiaBytes != null ? _cargoPropio : null,
@@ -348,11 +373,77 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         firmaOtraBytes: firmaOtraBytes,
         cargoOtro: firmaOtraBytes != null ? _cargoOtro : null,
         nombreOtro: firmaOtraBytes != null ? _otroPresidenteNombre : null,
-      );
-      await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'listado_socios.pdf');
-    } finally {
-      if (mounted) setState(() => _generando = false);
+      ),
+    ];
+  }
+
+  /// "Todas las paradas": un listado por parada, cada uno bien separado
+  /// (arranca en página nueva -- ver _construirPdf). La firma del
+  /// presidente de asociación es la misma en todas las secciones (se
+  /// descarga una sola vez); la de cada presidente de parada se busca
+  /// aparte por sección y solo se suma si ya está aprobada -- acá no se
+  /// dispara ningún pedido nuevo.
+  Future<List<_SeccionListado>> _construirSeccionesPorParada(List<ConductorListadoItem> items) async {
+    final porParada = <String, List<ConductorListadoItem>>{};
+    for (final item in items) {
+      final nombre = item.paradaNombre ?? 'Sin parada';
+      porParada.putIfAbsent(nombre, () => []).add(item);
     }
+    final nombresOrdenados = porParada.keys.toList()..sort();
+
+    Uint8List? firmaAsociacionBytes;
+    if (_incluirMiFirma && _miFirmaPath != null) {
+      firmaAsociacionBytes = await _descargarFirma(_miFirmaPath!);
+    }
+    final cargoAsociacion = firmaAsociacionBytes != null ? _cargoPropio : null;
+    final nombreAsociacion = firmaAsociacionBytes != null ? widget.usuario.nombre : null;
+
+    final secciones = <_SeccionListado>[];
+    for (final nombreParada in nombresOrdenados) {
+      final itemsParada = porParada[nombreParada]!;
+      final paradaId = itemsParada.first.paradaId;
+
+      Uint8List? firmaParadaBytes;
+      String? cargoParada;
+      String? nombrePresidenteParada;
+      if (_incluirFirmasParadas && paradaId != null) {
+        try {
+          final presidenteId = await _firmaService.obtenerPresidenteParadaId(paradaId);
+          if (presidenteId != null) {
+            final estado = await _firmaService.consultarEstado(
+              solicitanteId: widget.usuario.id,
+              firmanteId: presidenteId,
+              paradaId: paradaId,
+            );
+            if (estado == EstadoFirma.aprobada) {
+              final path = await _firmaService.cargarFirmaUrl(presidenteId);
+              if (path != null) {
+                firmaParadaBytes = await _descargarFirma(path);
+                if (firmaParadaBytes != null) {
+                  nombrePresidenteParada = await _firmaService.cargarNombreUsuario(presidenteId);
+                  cargoParada = cargoPresidenteParada(nombreParada);
+                }
+              }
+            }
+          }
+        } catch (_) {
+          // Si falla la consulta de esta parada puntual, esa sección
+          // sale sin su firma -- no bloquea el resto del PDF.
+        }
+      }
+
+      secciones.add(_SeccionListado(
+        subtitulo: 'PARADA Nº $nombreParada',
+        items: itemsParada,
+        firmaPropiaBytes: firmaAsociacionBytes,
+        cargoPropio: cargoAsociacion,
+        nombrePropio: nombreAsociacion,
+        firmaOtraBytes: firmaParadaBytes,
+        cargoOtro: cargoParada,
+        nombreOtro: nombrePresidenteParada,
+      ));
+    }
+    return secciones;
   }
 
   Future<Uint8List?> _descargarFirma(String path) async {
@@ -409,6 +500,15 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
                   ],
                   onChanged: _cambiarParadaFiltro,
                 ),
+                if (_modoBulk) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Se genera un PDF con un listado separado por cada parada, cada uno en su propia página.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
               ],
               const SizedBox(height: 20),
               Text('Datos a incluir', style: Theme.of(context).textTheme.titleSmall),
@@ -438,36 +538,55 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
               const SizedBox(height: 24),
               Text('Firmas a incluir', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
-              _SeccionFirmas(
-                cargando: _cargandoFirmas,
-                solicitando: _solicitandoFirma,
-                miFirmaDisponible: _miFirmaPath != null,
-                miRolLabel: widget.usuario.rol.label,
-                incluirMiFirma: _incluirMiFirma,
-                onCambiarMiFirma: _miFirmaPath == null
-                    ? null
-                    : (valor) => setState(() => _incluirMiFirma = valor),
-                onIrASubirFirma: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => MiFirmaScreen(usuario: widget.usuario)),
-                  );
-                  // Forzamos un refetch aunque el alcance (parada) no
-                  // haya cambiado, porque lo que cambió es la firma
-                  // propia.
-                  setState(() => _paradaIdConsultada = null);
-                  _cargarFirmas();
-                },
-                haySolaParada: _paradaIdActual != null,
-                otroRolLabel: _otroRolLabel,
-                otroPresidenteAsignado: _otroPresidenteId != null,
-                estadoOtraFirma: _estadoOtraFirma,
-                otroFirmaDisponible: _otroFirmaPath != null,
-                incluirOtraFirma: _incluirOtraFirma,
-                onCambiarOtraFirma: (_estadoOtraFirma == EstadoFirma.aprobada && _otroFirmaPath != null)
-                    ? (valor) => setState(() => _incluirOtraFirma = valor)
-                    : null,
-                onSolicitarOtraFirma: _solicitarOtraFirma,
-              ),
+              if (_modoBulk)
+                _SeccionFirmasBulk(
+                  miFirmaDisponible: _miFirmaPath != null,
+                  miRolLabel: widget.usuario.rol.label,
+                  incluirMiFirma: _incluirMiFirma,
+                  onCambiarMiFirma: _miFirmaPath == null
+                      ? null
+                      : (valor) => setState(() => _incluirMiFirma = valor),
+                  onIrASubirFirma: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => MiFirmaScreen(usuario: widget.usuario)),
+                    );
+                    setState(() => _paradaIdConsultada = null);
+                    _cargarFirmas();
+                  },
+                  incluirFirmasParadas: _incluirFirmasParadas,
+                  onCambiarFirmasParadas: (valor) => setState(() => _incluirFirmasParadas = valor),
+                )
+              else
+                _SeccionFirmas(
+                  cargando: _cargandoFirmas,
+                  solicitando: _solicitandoFirma,
+                  miFirmaDisponible: _miFirmaPath != null,
+                  miRolLabel: widget.usuario.rol.label,
+                  incluirMiFirma: _incluirMiFirma,
+                  onCambiarMiFirma: _miFirmaPath == null
+                      ? null
+                      : (valor) => setState(() => _incluirMiFirma = valor),
+                  onIrASubirFirma: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => MiFirmaScreen(usuario: widget.usuario)),
+                    );
+                    // Forzamos un refetch aunque el alcance (parada) no
+                    // haya cambiado, porque lo que cambió es la firma
+                    // propia.
+                    setState(() => _paradaIdConsultada = null);
+                    _cargarFirmas();
+                  },
+                  haySolaParada: _paradaIdActual != null,
+                  otroRolLabel: _otroRolLabel,
+                  otroPresidenteAsignado: _otroPresidenteId != null,
+                  estadoOtraFirma: _estadoOtraFirma,
+                  otroFirmaDisponible: _otroFirmaPath != null,
+                  incluirOtraFirma: _incluirOtraFirma,
+                  onCambiarOtraFirma: (_estadoOtraFirma == EstadoFirma.aprobada && _otroFirmaPath != null)
+                      ? (valor) => setState(() => _incluirOtraFirma = valor)
+                      : null,
+                  onSolicitarOtraFirma: _solicitarOtraFirma,
+                ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -613,19 +732,13 @@ class _SeccionFirmas extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (miFirmaDisponible)
-              CheckboxListTile(
-                value: incluirMiFirma,
-                activeColor: AppTheme.rojoInstitucional,
-                title: Text('Mi firma ($miRolLabel)'),
-                onChanged: onCambiarMiFirma == null ? null : (v) => onCambiarMiFirma!(v ?? false),
-              )
-            else
-              ListTile(
-                leading: Icon(Icons.draw_outlined, color: Colors.grey.shade400),
-                title: const Text('No subiste tu firma todavía'),
-                trailing: TextButton(onPressed: onIrASubirFirma, child: const Text('Subir')),
-              ),
+            _BloqueMiFirma(
+              disponible: miFirmaDisponible,
+              rolLabel: miRolLabel,
+              incluir: incluirMiFirma,
+              onCambiar: onCambiarMiFirma,
+              onIrASubir: onIrASubirFirma,
+            ),
             const Divider(height: 1),
             if (cargando)
               const Padding(
@@ -690,6 +803,125 @@ class _SeccionFirmas extends StatelessWidget {
   }
 }
 
+/// El bloque "mi firma" es igual en el modo de una sola parada y en el
+/// modo "todas juntas" -- se extrae acá para no duplicarlo.
+class _BloqueMiFirma extends StatelessWidget {
+  final bool disponible;
+  final String rolLabel;
+  final bool incluir;
+  final ValueChanged<bool>? onCambiar;
+  final VoidCallback onIrASubir;
+
+  const _BloqueMiFirma({
+    required this.disponible,
+    required this.rolLabel,
+    required this.incluir,
+    required this.onCambiar,
+    required this.onIrASubir,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (disponible) {
+      return CheckboxListTile(
+        value: incluir,
+        activeColor: AppTheme.rojoInstitucional,
+        title: Text('Mi firma ($rolLabel)'),
+        onChanged: onCambiar == null ? null : (v) => onCambiar!(v ?? false),
+      );
+    }
+    return ListTile(
+      leading: Icon(Icons.draw_outlined, color: Colors.grey.shade400),
+      title: const Text('No subiste tu firma todavía'),
+      trailing: TextButton(onPressed: onIrASubir, child: const Text('Subir')),
+    );
+  }
+}
+
+/// Firmas para el modo "todas las paradas juntas": la propia (misma
+/// idea que en el modo de una sola parada) y un único interruptor para
+/// sumar, en cada sección, la firma de ESE presidente de parada -- sin
+/// pedir nada nuevo, solo usa lo que ya esté aprobado (ver
+/// _construirSeccionesPorParada). Las que falten quedan sin firma de
+/// parada; para pedir una puntual hay que imprimir esa parada sola.
+class _SeccionFirmasBulk extends StatelessWidget {
+  final bool miFirmaDisponible;
+  final String miRolLabel;
+  final bool incluirMiFirma;
+  final ValueChanged<bool>? onCambiarMiFirma;
+  final VoidCallback onIrASubirFirma;
+  final bool incluirFirmasParadas;
+  final ValueChanged<bool> onCambiarFirmasParadas;
+
+  const _SeccionFirmasBulk({
+    required this.miFirmaDisponible,
+    required this.miRolLabel,
+    required this.incluirMiFirma,
+    required this.onCambiarMiFirma,
+    required this.onIrASubirFirma,
+    required this.incluirFirmasParadas,
+    required this.onCambiarFirmasParadas,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _BloqueMiFirma(
+              disponible: miFirmaDisponible,
+              rolLabel: miRolLabel,
+              incluir: incluirMiFirma,
+              onCambiar: onCambiarMiFirma,
+              onIrASubir: onIrASubirFirma,
+            ),
+            const Divider(height: 1),
+            CheckboxListTile(
+              value: incluirFirmasParadas,
+              activeColor: AppTheme.rojoInstitucional,
+              title: const Text('Firma de cada presidente de parada'),
+              subtitle: const Text(
+                'Se suma en cada sección la que ya esté aprobada. Las que falten quedan sin firma de parada.',
+              ),
+              onChanged: (v) => onCambiarFirmasParadas(v ?? false),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Fila de datos para armar un listado: sale con su propio membrete,
+/// tabla y bloque de firma -- en modo de una sola parada hay una sola
+/// [_SeccionListado] en la lista, en modo "todas juntas" hay una por
+/// cada parada con conductores seleccionados.
+class _SeccionListado {
+  final String? subtitulo;
+  final List<ConductorListadoItem> items;
+  final Uint8List? firmaPropiaBytes;
+  final String? cargoPropio;
+  final String? nombrePropio;
+  final Uint8List? firmaOtraBytes;
+  final String? cargoOtro;
+  final String? nombreOtro;
+
+  _SeccionListado({
+    this.subtitulo,
+    required this.items,
+    this.firmaPropiaBytes,
+    this.cargoPropio,
+    this.nombrePropio,
+    this.firmaOtraBytes,
+    this.cargoOtro,
+    this.nombreOtro,
+  });
+}
+
 /// ---------------------------------------------------------------------
 /// PDF — mismo membrete que ya usa TRAUDE en sus listados en papel
 /// (título rojo, texto institucional, franja bandera + logo, "LISTA DE
@@ -702,15 +934,8 @@ class _SeccionFirmas extends StatelessWidget {
 /// ---------------------------------------------------------------------
 
 Future<Uint8List> _construirPdf({
-  required String? subtitulo,
+  required List<_SeccionListado> secciones,
   required List<_Columna> columnas,
-  required List<ConductorListadoItem> items,
-  Uint8List? firmaPropiaBytes,
-  String? cargoPropio,
-  String? nombrePropio,
-  Uint8List? firmaOtraBytes,
-  String? cargoOtro,
-  String? nombreOtro,
 }) async {
   final doc = pw.Document();
   final rojo = PdfColor.fromHex('#CC0000');
@@ -733,27 +958,42 @@ Future<Uint8List> _construirPdf({
         ),
       );
 
-  final filas = <pw.TableRow>[
-    pw.TableRow(
-      decoration: pw.BoxDecoration(color: rojo),
-      children: [
-        celda('N.º', header: true, angosta: true),
-        ...columnas.map((c) => celda(c.etiqueta, header: true)),
-      ],
-    ),
-    ...items.asMap().entries.map((entry) {
-      final par = entry.key.isEven;
-      return pw.TableRow(
-        decoration: pw.BoxDecoration(color: par ? PdfColors.white : PdfColors.grey100),
+  pw.Table tabla(List<ConductorListadoItem> items) {
+    final filas = <pw.TableRow>[
+      pw.TableRow(
+        decoration: pw.BoxDecoration(color: rojo),
         children: [
-          celda('${entry.key + 1}', angosta: true),
-          ...columnas.map((c) => celda(c.valor(entry.value), alta: c == _Columna.firma)),
+          celda('N.º', header: true, angosta: true),
+          ...columnas.map((c) => celda(c.etiqueta, header: true)),
         ],
-      );
-    }),
-  ];
+      ),
+      ...items.asMap().entries.map((entry) {
+        final par = entry.key.isEven;
+        return pw.TableRow(
+          decoration: pw.BoxDecoration(color: par ? PdfColors.white : PdfColors.grey100),
+          children: [
+            celda('${entry.key + 1}', angosta: true),
+            ...columnas.map((c) => celda(c.valor(entry.value), alta: c == _Columna.firma)),
+          ],
+        );
+      }),
+    ];
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey700, width: 0.6),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(0.5),
+        for (var i = 0; i < columnas.length; i++)
+          i + 1: switch (columnas[i]) {
+            _Columna.nombre => const pw.FlexColumnWidth(2.2),
+            _Columna.firma => const pw.FlexColumnWidth(1.8),
+            _ => const pw.FlexColumnWidth(1),
+          },
+      },
+      children: filas,
+    );
+  }
 
-  pw.Widget membrete() => pw.Column(
+  pw.Widget membrete({required String? subtitulo, required int cantidad}) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           pw.Text('T.R.A.U.D.E.',
@@ -806,7 +1046,7 @@ Future<Uint8List> _construirPdf({
                 style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: rojo)),
           ],
           pw.SizedBox(height: 2),
-          pw.Text('Generado el ${formatoFecha.format(DateTime.now())} · ${items.length} socios',
+          pw.Text('Generado el ${formatoFecha.format(DateTime.now())} · $cantidad socios',
               style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
           pw.SizedBox(height: 12),
         ],
@@ -833,40 +1073,38 @@ Future<Uint8List> _construirPdf({
         ],
       );
 
-  final tieneFirmas = firmaPropiaBytes != null || firmaOtraBytes != null;
-
-  doc.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(28),
-      header: (context) => context.pageNumber == 1 ? membrete() : pw.SizedBox.shrink(),
-      build: (context) => [
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey700, width: 0.6),
-          columnWidths: {
-            0: const pw.FlexColumnWidth(0.5),
-            for (var i = 0; i < columnas.length; i++)
-              i + 1: switch (columnas[i]) {
-                _Columna.nombre => const pw.FlexColumnWidth(2.2),
-                _Columna.firma => const pw.FlexColumnWidth(1.8),
-                _ => const pw.FlexColumnWidth(1),
-              },
-          },
-          children: filas,
-        ),
-        if (tieneFirmas) ...[
-          pw.SizedBox(height: 50),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
-            children: [
-              if (firmaPropiaBytes != null) bloqueFirma(firmaPropiaBytes, cargoPropio ?? '', nombrePropio),
-              if (firmaOtraBytes != null) bloqueFirma(firmaOtraBytes, cargoOtro ?? '', nombreOtro),
-            ],
-          ),
+  // Un addPage(MultiPage(...)) por sección: cada uno arranca su propia
+  // numeración de página desde 1, así el membrete (header condicionado a
+  // pageNumber == 1) y el bloque de firma (al final del `build`) salen
+  // una sola vez por parada aunque esa parada sola ocupe varias hojas —
+  // sin repetir la firma en cada página intermedia.
+  for (final seccion in secciones) {
+    final tieneFirmas = seccion.firmaPropiaBytes != null || seccion.firmaOtraBytes != null;
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        header: (context) => context.pageNumber == 1
+            ? membrete(subtitulo: seccion.subtitulo, cantidad: seccion.items.length)
+            : pw.SizedBox.shrink(),
+        build: (context) => [
+          tabla(seccion.items),
+          if (tieneFirmas) ...[
+            pw.SizedBox(height: 50),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
+              children: [
+                if (seccion.firmaPropiaBytes != null)
+                  bloqueFirma(seccion.firmaPropiaBytes!, seccion.cargoPropio ?? '', seccion.nombrePropio),
+                if (seccion.firmaOtraBytes != null)
+                  bloqueFirma(seccion.firmaOtraBytes!, seccion.cargoOtro ?? '', seccion.nombreOtro),
+              ],
+            ),
+          ],
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   return doc.save();
 }

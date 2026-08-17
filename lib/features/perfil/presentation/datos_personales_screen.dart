@@ -8,12 +8,13 @@ import '../../../shared/widgets/icon_badge.dart';
 import '../data/perfil_service.dart';
 import 'cambiar_contrasena_screen.dart';
 
-/// Datos personales del usuario logueado: nombre, teléfono, cédula y
-/// Resolución Nº individual se pueden editar acá mismo (vale para
-/// cualquier rol: conductor, presidente de parada o de asociación — ver
-/// PerfilService.actualizarDatosPersonales). No hace falta cargar la
-/// Resolución Nº al registrarse, se completa después desde acá. Solo el
-/// email queda fuera, por estar atado a la cuenta de Supabase Auth. La
+/// Datos personales del usuario logueado: nombre, teléfono, cédula,
+/// Resolución Nº individual y correo se pueden editar acá mismo (vale
+/// para cualquier rol: conductor, presidente de parada o de asociación
+/// — ver PerfilService.actualizarDatosPersonales). No hace falta cargar
+/// la Resolución Nº al registrarse, se completa después desde acá. El
+/// correo cambia al toque, sin pedir confirmación por mail (pensado
+/// para reemplazar correos de prueba por el real de la persona). La
 /// foto se sube/cambia desde acá también.
 class DatosPersonalesScreen extends StatefulWidget {
   final Usuario usuario;
@@ -31,6 +32,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
   String? _fotoUrl;
   String? _tallaRemera;
   late String _nombre;
+  String? _email;
   String? _telefono;
   String? _cedula;
   String? _resolucionIndividual;
@@ -43,6 +45,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
     _fotoUrl = widget.usuario.fotoPerfilUrl;
     _tallaRemera = widget.usuario.tallaRemera;
     _nombre = widget.usuario.nombre;
+    _email = widget.usuario.email;
     _telefono = widget.usuario.telefono;
     _cedula = widget.usuario.cedula;
     _resolucionIndividual = widget.usuario.resolucionIndividual;
@@ -69,6 +72,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
       isScrollControlled: true,
       builder: (context) => _EditarDatosSheet(
         nombre: _nombre,
+        email: _email,
         telefono: _telefono,
         cedula: _cedula,
         resolucionIndividual: _resolucionIndividual,
@@ -78,12 +82,14 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
 
     final anteriores = _DatosEditados(
       nombre: _nombre,
+      email: _email,
       telefono: _telefono,
       cedula: _cedula,
       resolucionIndividual: _resolucionIndividual,
     );
     setState(() {
       _nombre = resultado.nombre;
+      _email = resultado.email;
       _telefono = resultado.telefono;
       _cedula = resultado.cedula;
       _resolucionIndividual = resultado.resolucionIndividual;
@@ -92,6 +98,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
       await _perfilService.actualizarDatosPersonales(
         usuarioId: widget.usuario.id,
         nombre: resultado.nombre,
+        email: resultado.email,
         telefono: resultado.telefono,
         cedula: resultado.cedula,
         resolucionIndividual: resultado.resolucionIndividual,
@@ -103,6 +110,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
       if (!mounted) return;
       setState(() {
         _nombre = anteriores.nombre;
+        _email = anteriores.email;
         _telefono = anteriores.telefono;
         _cedula = anteriores.cedula;
         _resolucionIndividual = anteriores.resolucionIndividual;
@@ -288,7 +296,7 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
           Card(
             child: Column(
               children: [
-                _CampoInfo(icono: Icons.email_outlined, etiqueta: 'Email', valor: usuario.email),
+                _CampoInfo(icono: Icons.email_outlined, etiqueta: 'Email', valor: _email),
                 const Divider(height: 1),
                 _CampoInfo(icono: Icons.phone_outlined, etiqueta: 'Teléfono', valor: _telefono),
                 const Divider(height: 1),
@@ -407,22 +415,33 @@ class _CampoInfo extends StatelessWidget {
 
 class _DatosEditados {
   final String nombre;
+  final String? email;
   final String? telefono;
   final String? cedula;
   final String? resolucionIndividual;
-  const _DatosEditados({required this.nombre, this.telefono, this.cedula, this.resolucionIndividual});
+  const _DatosEditados({
+    required this.nombre,
+    this.email,
+    this.telefono,
+    this.cedula,
+    this.resolucionIndividual,
+  });
 }
 
-/// Formulario para editar nombre, teléfono, cédula y Resolución Nº
-/// individual — disponible para cualquier rol. Email no se toca acá
-/// (ver PerfilService.actualizarDatosPersonales).
+/// Formulario para editar nombre, correo, teléfono, cédula y Resolución
+/// Nº individual — disponible para cualquier rol. El correo se aplica
+/// al toque, sin pedir confirmación por mail (ver
+/// PerfilService.actualizarDatosPersonales) — pensado para casos como
+/// reemplazar un correo de prueba por el real de la persona.
 class _EditarDatosSheet extends StatefulWidget {
   final String nombre;
+  final String? email;
   final String? telefono;
   final String? cedula;
   final String? resolucionIndividual;
   const _EditarDatosSheet({
     required this.nombre,
+    this.email,
     this.telefono,
     this.cedula,
     this.resolucionIndividual,
@@ -435,6 +454,7 @@ class _EditarDatosSheet extends StatefulWidget {
 class _EditarDatosSheetState extends State<_EditarDatosSheet> {
   final _formKey = GlobalKey<FormState>();
   late final _nombreController = TextEditingController(text: widget.nombre);
+  late final _emailController = TextEditingController(text: widget.email ?? '');
   late final _telefonoController = TextEditingController(text: widget.telefono ?? '');
   late final _cedulaController = TextEditingController(text: widget.cedula ?? '');
   late final _resolucionIndividualController = TextEditingController(text: widget.resolucionIndividual ?? '');
@@ -442,6 +462,7 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
   @override
   void dispose() {
     _nombreController.dispose();
+    _emailController.dispose();
     _telefonoController.dispose();
     _cedulaController.dispose();
     _resolucionIndividualController.dispose();
@@ -452,6 +473,7 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
     if (!_formKey.currentState!.validate()) return;
     Navigator.of(context).pop(_DatosEditados(
       nombre: _nombreController.text.trim(),
+      email: _emailController.text,
       telefono: _telefonoController.text,
       cedula: _cedulaController.text,
       resolucionIndividual: _resolucionIndividualController.text,
@@ -467,7 +489,8 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
         top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
-      child: Form(
+      child: SingleChildScrollView(
+        child: Form(
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -487,6 +510,21 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
               ),
               validator: (value) =>
                   (value == null || value.trim().isEmpty) ? 'Ingresá tu nombre' : null,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Correo electrónico',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                final texto = value?.trim() ?? '';
+                if (texto.isEmpty) return 'Ingresá tu correo';
+                if (!texto.contains('@') || !texto.contains('.')) return 'Ingresá un correo válido';
+                return null;
+              },
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -521,6 +559,7 @@ class _EditarDatosSheetState extends State<_EditarDatosSheet> {
               child: const Text('Guardar'),
             ),
           ],
+        ),
         ),
       ),
     );

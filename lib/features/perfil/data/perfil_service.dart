@@ -43,19 +43,42 @@ class PerfilService {
   final _client = SupabaseConfig.client;
   static const _bucket = 'avatars';
 
-  /// Nombre, teléfono, cédula y Resolución Nº (individual, del propio
-  /// socio) que el usuario declara — vale para cualquier rol (conductor,
-  /// presidente de parada o de asociación). No hace falta cargarla al
-  /// registrarse, se completa después desde acá. Email queda afuera a
-  /// propósito: está atado a la cuenta de Supabase Auth y cambiarlo acá
-  /// lo desincroniza.
+  /// Nombre, teléfono, cédula, Resolución Nº (individual, del propio
+  /// socio) y correo que el usuario declara — vale para cualquier rol
+  /// (conductor, presidente de parada o de asociación). No hace falta
+  /// cargar la Resolución Nº al registrarse, se completa después desde
+  /// acá.
+  ///
+  /// El correo es un caso especial: está atado a la cuenta de Supabase
+  /// Auth (`auth.users.email`), no solo a la tabla `usuarios`, así que
+  /// si cambió, primero se actualiza ahí (vía `auth.updateUser`, que
+  /// requiere sesión activa y aplica el cambio directo -- este proyecto
+  /// no depende de que lleguen correos de confirmación en ningún otro
+  /// lado, ver login por cédula/reset de contraseña) y recién si eso
+  /// funciona se refleja en `usuarios.email` para no desincronizar los
+  /// dos lugares donde vive el correo. Pensado para casos como
+  /// reemplazar un correo de prueba por el real de la persona.
   Future<void> actualizarDatosPersonales({
     required String usuarioId,
     required String nombre,
     String? telefono,
     String? cedula,
     String? resolucionIndividual,
+    String? email,
   }) async {
+    final emailNuevo = email?.trim();
+    final emailActual = _client.auth.currentUser?.email;
+    final cambioEmail =
+        emailNuevo != null && emailNuevo.isNotEmpty && emailNuevo != emailActual;
+
+    if (cambioEmail) {
+      try {
+        await _client.auth.updateUser(UserAttributes(email: emailNuevo));
+      } catch (e) {
+        throw PerfilException(_mensajeErrorEmail(e));
+      }
+    }
+
     try {
       await _client.from('usuarios').update({
         'nombre': nombre.trim(),
@@ -64,6 +87,7 @@ class PerfilService {
         'resolucion_individual': (resolucionIndividual == null || resolucionIndividual.trim().isEmpty)
             ? null
             : resolucionIndividual.trim(),
+        if (cambioEmail) 'email': emailNuevo,
       }).eq('id', usuarioId);
     } on PostgrestException catch (e) {
       if (e.code == '23505') {
@@ -71,12 +95,30 @@ class PerfilService {
         if (detalle.contains('resolucion_individual')) {
           throw PerfilException('Esa Resolución Nº ya está en uso por otra cuenta.');
         }
+        if (detalle.contains('email')) {
+          throw PerfilException('Ese correo ya está en uso por otra cuenta.');
+        }
         throw PerfilException('Esa cédula ya está registrada por otra cuenta.');
       }
-      throw PerfilException('No se pudieron guardar los cambios. Intentá de nuevo.');
+      throw PerfilException(cambioEmail
+          ? 'El correo se actualizó, pero no se pudo guardar el resto de los cambios. Volvé a intentar.'
+          : 'No se pudieron guardar los cambios. Intentá de nuevo.');
     } catch (_) {
-      throw PerfilException('No se pudieron guardar los cambios. Intentá de nuevo.');
+      throw PerfilException(cambioEmail
+          ? 'El correo se actualizó, pero no se pudo guardar el resto de los cambios. Volvé a intentar.'
+          : 'No se pudieron guardar los cambios. Intentá de nuevo.');
     }
+  }
+
+  String _mensajeErrorEmail(Object e) {
+    final texto = e.toString().toLowerCase();
+    if (texto.contains('already') || texto.contains('registrad') || texto.contains('exists')) {
+      return 'Ese correo ya está en uso por otra cuenta.';
+    }
+    if (texto.contains('invalid') || texto.contains('valid email')) {
+      return 'Ese correo no es válido.';
+    }
+    return 'No se pudo actualizar el correo. Intentá de nuevo.';
   }
 
   /// Sube la foto a `avatars/{usuarioId}/foto.jpg` (siempre el mismo

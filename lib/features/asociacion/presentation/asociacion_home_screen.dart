@@ -22,6 +22,7 @@ import 'miembros_activos_screen.dart';
 import 'parada_detalle_screen.dart';
 import 'paradas_screen.dart';
 import 'solicitudes_pendientes_screen.dart';
+import 'vencimientos_carnet_screen.dart';
 
 /// Home del rol presidente de asociación: vista global de paradas,
 /// cuotas, incidentes y mensajería.
@@ -242,6 +243,18 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
                 return;
               }
               _abrirMiembrosActivos();
+            },
+          ),
+          ItemMenuLateral(
+            icono: Icons.credit_card_outlined,
+            titulo: 'Vencimientos de carnet',
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => VencimientosCarnetScreen(usuario: widget.usuario),
+                ),
+              );
             },
           ),
           ItemMenuLateral(

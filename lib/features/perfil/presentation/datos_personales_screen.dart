@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/usuario.dart' show Usuario, tallasRemeraDisponibles;
 import '../../../shared/models/user_role.dart';
@@ -33,6 +34,8 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
   String? _telefono;
   String? _cedula;
   String? _resolucionIndividual;
+  DateTime? _carnetVencimiento;
+  bool _cargandoVencimiento = true;
 
   @override
   void initState() {
@@ -43,6 +46,21 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
     _telefono = widget.usuario.telefono;
     _cedula = widget.usuario.cedula;
     _resolucionIndividual = widget.usuario.resolucionIndividual;
+    _cargarVencimientoCarnet();
+  }
+
+  Future<void> _cargarVencimientoCarnet() async {
+    try {
+      final vencimiento = await _perfilService.cargarSoloVencimientoCarnet(widget.usuario.id);
+      if (!mounted) return;
+      setState(() {
+        _carnetVencimiento = vencimiento;
+        _cargandoVencimiento = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cargandoVencimiento = false);
+    }
   }
 
   Future<void> _editarDatos() async {
@@ -91,6 +109,26 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
+  }
+
+  Color _colorVencimientoCarnet() {
+    final v = _carnetVencimiento;
+    if (v == null) return Colors.grey;
+    final hoy = DateTime.now();
+    final dias = v.difference(DateTime(hoy.year, hoy.month, hoy.day)).inDays;
+    if (dias < 0) return AppTheme.estadoUrgente;
+    if (dias <= 60) return AppTheme.estadoAtencion;
+    return AppTheme.estadoOk;
+  }
+
+  String _etiquetaVencimientoCarnet() {
+    final v = _carnetVencimiento;
+    if (v == null) return '';
+    final hoy = DateTime.now();
+    final dias = v.difference(DateTime(hoy.year, hoy.month, hoy.day)).inDays;
+    if (dias < 0) return 'Vencido';
+    if (dias <= 60) return 'Por vencer';
+    return 'Vigente';
   }
 
   Future<void> _guardarTalla(String talla) async {
@@ -261,6 +299,35 @@ class _DatosPersonalesScreenState extends State<DatosPersonalesScreen> {
                     etiqueta: 'Resolución Nº',
                     valor: _resolucionIndividual),
               ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Card(
+            child: ListTile(
+              leading: IconBadge(
+                icono: Icons.credit_card_outlined,
+                color: _colorVencimientoCarnet(),
+                diametro: 40,
+              ),
+              title: const Text('Vencimiento del carnet'),
+              subtitle: _cargandoVencimiento
+                  ? const Text('Cargando...')
+                  : Text(
+                      _carnetVencimiento != null
+                          ? '${DateFormat('dd/MM/yyyy').format(_carnetVencimiento!)} · ${_etiquetaVencimientoCarnet()}'
+                          : 'Todavía no se generó. Se genera al entrar por primera vez a "Mi carnet".',
+                    ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'La renovación la hace el presidente correspondiente o el responsable de la plataforma, no hace falta que la pidas acá.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ),
           const SizedBox(height: 20),

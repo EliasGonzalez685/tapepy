@@ -21,6 +21,7 @@ import '../../asociacion/data/lote_pago_service.dart';
 import '../../asociacion/presentation/lote_pago_form_widget.dart';
 import '../../conductor/presentation/mi_perfil_socio_screen.dart';
 import '../../asociacion/presentation/solicitudes_pendientes_screen.dart';
+import '../../asociacion/presentation/vencimientos_carnet_screen.dart';
 import '../../auth/data/auth_service.dart';
 import '../../firma/data/firma_service.dart';
 import '../../firma/presentation/mi_firma_screen.dart';
@@ -461,6 +462,24 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
                       _cargarSolicitudesPendientes(_parada!.id);
                       _cargarSolicitudesFirma();
                     });
+                  },
+                ),
+                ItemMenuLateral(
+                  icono: Icons.credit_card_outlined,
+                  titulo: 'Vencimientos de carnet',
+                  onTap: () {
+                    final usuario = widget.usuario;
+                    Navigator.of(context).pop();
+                    if (usuario == null) return;
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => VencimientosCarnetScreen(
+                          usuario: usuario,
+                          paradaId: _parada!.id,
+                          paradaNombre: _parada!.nombre,
+                        ),
+                      ),
+                    );
                   },
                 ),
                 ItemMenuLateral(

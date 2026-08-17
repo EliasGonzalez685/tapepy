@@ -110,10 +110,28 @@ class PerfilService {
     await _client.from('usuarios').update({'talla_remera': tallaRemera}).eq('id', usuarioId);
   }
 
+  /// Solo la fecha de vencimiento del carnet, de lectura -- para
+  /// mostrar en Datos personales sin duplicar la lógica de
+  /// autogeneración de cargarDatosCarnet (que además crea el qr_token
+  /// si hace falta, algo que acá no corresponde). La renovación misma
+  /// es potestad de los presidentes o del dueño de plataforma, ver
+  /// ParadaDetalleService.renovarCarnet -- por eso no hay
+  /// actualizarVencimientoCarnet acá.
+  Future<DateTime?> cargarSoloVencimientoCarnet(String usuarioId) async {
+    final row = await _client
+        .from('usuarios')
+        .select('carnet_vencimiento')
+        .eq('id', usuarioId)
+        .single();
+    final str = row['carnet_vencimiento'] as String?;
+    return str != null ? DateTime.parse(str) : null;
+  }
+
   /// Trae los datos para el carnet. Si el usuario todavía no tiene
   /// `qr_token` y/o `carnet_vencimiento`, los genera y guarda acá mismo
-  /// (vigencia de 1 año desde hoy — regla nombrada por Elias, sin
-  /// automatización de renovación todavía).
+  /// (vigencia de 1 año desde hoy al generarse por primera vez;
+  /// renovaciones posteriores las hace el presidente correspondiente o
+  /// el dueño de plataforma desde "Vencimientos de carnet").
   Future<CarnetData> cargarDatosCarnet(String usuarioId) async {
     final row = await _client
         .from('usuarios')

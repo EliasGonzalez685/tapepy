@@ -308,6 +308,42 @@ class ConductorListadoItem {
   }
 }
 
+/// Fila para el listado de vencimientos de carnet: quién es, de qué
+/// parada (solo hace falta en la vista org-wide) y cuándo vence. `rol`
+/// queda crudo (valor de usuarios.rol) porque la pantalla lo necesita
+/// para decidir si el presidente que está mirando puede renovarlo o no
+/// (ver política usuarios_gestionar_conductor_update, migración 0021:
+/// los presidentes solo pueden tocar filas con rol = 'conductor', el
+/// dueño de plataforma no tiene esa restricción).
+class SocioCarnetItem {
+  final String usuarioId;
+  final String nombre;
+  final String rol;
+  final String? paradaNombre;
+  final DateTime? carnetVencimiento;
+
+  SocioCarnetItem({
+    required this.usuarioId,
+    required this.nombre,
+    required this.rol,
+    this.paradaNombre,
+    this.carnetVencimiento,
+  });
+
+  factory SocioCarnetItem.fromMap(Map<String, dynamic> map) {
+    final usuario = map['usuarios'] as Map<String, dynamic>?;
+    final parada = map['paradas'] as Map<String, dynamic>?;
+    final vencimientoStr = usuario?['carnet_vencimiento'] as String?;
+    return SocioCarnetItem(
+      usuarioId: usuario?['id'] as String? ?? '',
+      nombre: usuario?['nombre'] as String? ?? 'Sin nombre',
+      rol: usuario?['rol'] as String? ?? 'conductor',
+      paradaNombre: parada?['nombre'] as String?,
+      carnetVencimiento: vencimientoStr != null ? DateTime.parse(vencimientoStr) : null,
+    );
+  }
+}
+
 class ParadaDetalleService {
   final _client = SupabaseConfig.client;
 
@@ -624,5 +660,64 @@ class ParadaDetalleService {
     } catch (_) {
       throw IncidenteException('No se pudo reportar el incidente. Intentá de nuevo.');
     }
+  }
+
+  /// Vencimientos de carnet de una sola parada (presidente de esa
+  /// parada). Ordenado por vencimiento ascendente -- los que están sin
+  /// generar (null) primero, después los que vencen antes.
+  Future<List<SocioCarnetItem>> cargarVencimientosCarnet(String paradaId) async {
+    final rows = await _client
+        .from('conductores')
+        .select('usuarios(id, nombre, rol, carnet_vencimiento)')
+        .eq('parada_id', paradaId);
+    final items =
+        (rows as List).map((r) => SocioCarnetItem.fromMap(r as Map<String, dynamic>)).toList();
+    _ordenarPorVencimiento(items);
+    return items;
+  }
+
+  /// Igual que [cargarVencimientosCarnet] pero de TODA la organización
+  /// (presidente de asociación) o de una organización puntual (dueño de
+  /// plataforma, que reusa la misma pantalla -- ver
+  /// AsociacionHomeScreen). RLS ya scopea por organización para el
+  /// presidente; el dueño necesita el filtro explícito.
+  Future<List<SocioCarnetItem>> cargarVencimientosCarnetOrganizacion({
+    String? organizacionId,
+  }) async {
+    var query =
+        _client.from('conductores').select('paradas(nombre), usuarios(id, nombre, rol, carnet_vencimiento)');
+    if (organizacionId != null) {
+      query = query.eq('organizacion_id', organizacionId);
+    }
+    final rows = await query;
+    final items =
+        (rows as List).map((r) => SocioCarnetItem.fromMap(r as Map<String, dynamic>)).toList();
+    _ordenarPorVencimiento(items);
+    return items;
+  }
+
+  void _ordenarPorVencimiento(List<SocioCarnetItem> items) {
+    items.sort((a, b) {
+      final av = a.carnetVencimiento;
+      final bv = b.carnetVencimiento;
+      if (av == null && bv == null) return a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
+      if (av == null) return -1;
+      if (bv == null) return 1;
+      return av.compareTo(bv);
+    });
+  }
+
+  /// Renueva el carnet 1 año desde HOY (no desde el vencimiento
+  /// anterior, aunque ya esté vencido). Quién puede hacerlo lo decide la
+  /// RLS: los presidentes solo sobre filas rol='conductor' de su
+  /// alcance (ver migración 0021), el dueño de plataforma sin
+  /// restricción -- acá no se repite esa lógica, si el usuario no tiene
+  /// permiso Postgres simplemente rechaza el UPDATE.
+  Future<void> renovarCarnet(String usuarioId) async {
+    final nuevoVencimiento = DateTime.now().add(const Duration(days: 365));
+    final fecha = '${nuevoVencimiento.year.toString().padLeft(4, '0')}-'
+        '${nuevoVencimiento.month.toString().padLeft(2, '0')}-'
+        '${nuevoVencimiento.day.toString().padLeft(2, '0')}';
+    await _client.from('usuarios').update({'carnet_vencimiento': fecha}).eq('id', usuarioId);
   }
 }

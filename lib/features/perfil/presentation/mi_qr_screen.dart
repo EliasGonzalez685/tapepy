@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../../core/config/supabase_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/perfil_service.dart';
 
 /// Vista rápida del código QR, aparte del carnet completo — pensada para
-/// mostrar en pantalla sin tener que entrar al carnet entero. Todavía no
-/// se puede escanear para verificar membresía (eso queda para cuando se
-/// construya el lado que lo lee), pero ya se genera y se guarda el token.
+/// mostrar en pantalla sin tener que entrar al carnet entero. El QR
+/// codifica la URL pública de verificación (Edge Function
+/// `verificar-carnet`): cualquier lector de QR del teléfono la abre
+/// directo, sin necesidad de tener la app instalada -- mismo principio
+/// que un link de "compartir viaje".
 class MiQrScreen extends StatefulWidget {
   final String usuarioId;
   const MiQrScreen({super.key, required this.usuarioId});
@@ -58,7 +61,7 @@ class _MiQrScreenState extends State<MiQrScreen> {
                       ],
                     ),
                     child: QrImageView(
-                      data: 'TAPEPY:${datos.qrToken}',
+                      data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
                       size: 220,
                     ),
                   ),

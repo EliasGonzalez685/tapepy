@@ -21,4 +21,11 @@ class SupabaseConfig {
   }
 
   static SupabaseClient get client => Supabase.instance.client;
+
+  /// URL pública de verificación de carnet (Edge Function
+  /// `verificar-carnet`, sin login): es lo que codifica el QR del
+  /// carnet digital, para que cualquier lector de QR del teléfono la
+  /// abra directo, sin necesidad de tener la app instalada.
+  static String urlVerificacionCarnet(String qrToken) =>
+      '${dotenv.env['SUPABASE_URL']}/functions/v1/verificar-carnet?token=$qrToken';
 }

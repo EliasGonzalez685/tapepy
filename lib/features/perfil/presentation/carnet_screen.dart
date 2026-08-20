@@ -8,14 +8,16 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../../core/config/supabase_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/perfil_service.dart';
 
 /// Carnet digital del socio: vertical, frente y reverso (se toca la
 /// tarjeta para dar vuelta). Muestra la organización (Traude), no la
-/// marca TapePy. El QR todavía no se puede escanear/verificar — eso
-/// viene en una etapa siguiente — pero ya se genera con un token único
-/// por usuario.
+/// marca TapePy. El QR codifica la URL pública de verificación (Edge
+/// Function `verificar-carnet`), así que cualquier lector de QR lo abre
+/// directo y muestra nombre/foto/cédula/organización si el carnet está
+/// vigente.
 class CarnetScreen extends StatefulWidget {
   final String usuarioId;
   const CarnetScreen({super.key, required this.usuarioId});
@@ -347,7 +349,7 @@ class _CaraReverso extends StatelessWidget {
           const _EncabezadoOrganizacion(),
           const Spacer(),
           QrImageView(
-            data: 'TAPEPY:${datos.qrToken}',
+            data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
             size: 150,
           ),
           const SizedBox(height: 14),
@@ -571,7 +573,7 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
         pw.Spacer(),
         pw.BarcodeWidget(
           barcode: pw.Barcode.qrCode(),
-          data: 'TAPEPY:${datos.qrToken}',
+          data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
           width: 90,
           height: 90,
         ),

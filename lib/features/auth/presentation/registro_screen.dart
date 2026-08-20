@@ -54,9 +54,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
         return;
       }
       await _alElegirOrganizacion(organizaciones.first.id);
-    } catch (e) {
-      // ignore: avoid_print
-      print('Error cargando organizaciones: $e');
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _cargandoParadas = false;
@@ -88,9 +86,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
       final paradas = await _registroService.cargarParadas(organizacionId);
       if (!mounted) return;
       setState(() => _paradas = paradas);
-    } catch (e) {
-      // ignore: avoid_print
-      print('Error cargando paradas: $e');
+    } catch (_) {
       if (!mounted) return;
       setState(() =>
           _error = 'No se pudieron cargar las paradas. Intentá de nuevo.');

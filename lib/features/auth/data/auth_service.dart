@@ -17,6 +17,14 @@ class AuthService {
   /// [identificador] puede ser el email o la cédula — si no tiene "@" se
   /// resuelve a email primero (ver [_resolverEmail]), porque Supabase
   /// Auth siempre loguea contra un email.
+  ///
+  /// Bloqueo por intentos fallidos (pedido de Elias, 2026-08-20): a los
+  /// 5 intentos seguidos con contraseña incorrecta la cuenta queda
+  /// bloqueada -- no se autodesbloquea sola con el tiempo, solo el
+  /// dueño de plataforma puede levantarla desde su panel. Todo el
+  /// conteo vive en el backend (columnas + funciones en `usuarios`),
+  /// acá solo se consulta/reporta.
+  ///
   /// Tira [AuthException] con un mensaje entendible si algo falla.
   Future<Usuario> signIn({
     required String identificador,
@@ -24,10 +32,34 @@ class AuthService {
   }) async {
     try {
       final email = await _resolverEmail(identificador.trim());
-      final authResponse = await _client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+
+      final bloqueado = await _client.rpc(
+        'login_verificar_bloqueo',
+        params: {'p_email': email},
+      ) as bool? ??
+          false;
+      if (bloqueado) {
+        throw AuthException(
+          'Esta cuenta quedó bloqueada por varios intentos fallidos. '
+          'Solo el dueño de la plataforma puede desbloquearla.',
+        );
+      }
+
+      final AuthResponse authResponse;
+      try {
+        authResponse = await _client.auth.signInWithPassword(
+          email: email,
+          password: password,
+        );
+      } on AuthApiException catch (e) {
+        if (e.code == 'invalid_credentials') {
+          await _client.rpc('login_registrar_fallo', params: {'p_email': email});
+        }
+        rethrow;
+      }
+
+      // Login correcto: resetear el contador de intentos fallidos.
+      await _client.rpc('login_registrar_exito');
 
       final user = authResponse.user;
       final userId = user?.id;

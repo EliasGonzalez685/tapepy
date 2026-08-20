@@ -5,6 +5,7 @@ import '../../../shared/models/usuario.dart';
 import '../../../shared/widgets/menu_lateral.dart';
 import '../../asociacion/presentation/asociacion_home_screen.dart';
 import '../data/presidente_asociacion_service.dart';
+import 'cuentas_bloqueadas_screen.dart';
 
 /// Home del dueño de plataforma (Elias): es prácticamente el mismo
 /// panel que ve el presidente de asociación (paradas, solicitudes,
@@ -80,6 +81,16 @@ class _DuenoPlataformaHomeScreenState extends State<DuenoPlataformaHomeScreen> {
                     organizacionId: organizacion.id,
                     organizacionNombre: organizacion.nombre,
                   ),
+                );
+              },
+            ),
+            ItemMenuLateral(
+              icono: Icons.lock_outline,
+              titulo: 'Cuentas bloqueadas',
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CuentasBloqueadasScreen()),
                 );
               },
             ),

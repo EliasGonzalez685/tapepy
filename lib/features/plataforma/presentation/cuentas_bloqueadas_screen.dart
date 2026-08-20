@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/user_role.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../data/cuentas_bloqueadas_service.dart';
 

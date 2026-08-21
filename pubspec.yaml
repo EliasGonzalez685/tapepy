@@ -44,6 +44,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  # Genera el ícono real de la app (Android/iOS) a partir del logo de
+  # TapePy, reemplazando el ícono default de Flutter. Ver README /
+  # instrucciones: correr `dart run flutter_launcher_icons` una vez
+  # después de agregar esta dependencia.
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -51,3 +56,13 @@ flutter:
     - .env
     - assets/images/
     - assets/icons/
+
+# Configuración de flutter_launcher_icons: usa el logo de TapePy (la
+# plataforma) como ícono de la app, no el de Traude (que es solo la
+# primera organización que corre sobre la plataforma).
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/tapepy_logo.png"
+  min_sdk_android: 21
+  remove_alpha_ios: true

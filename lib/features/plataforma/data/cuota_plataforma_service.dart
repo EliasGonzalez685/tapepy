@@ -258,10 +258,13 @@ class CuotaPlataformaService {
   /// presidente de asociación. Agregación en cliente, mismo patrón que
   /// balance_pagos.dart.
   Future<List<CuotaPlataformaItem>> cargarPorOrganizacion(String organizacionId) async {
+    // cuotas_plataforma tiene DOS FK a usuarios (usuario_id y
+    // registrado_por) -- hay que decirle a PostgREST cuál de las dos
+    // usar acá, si no tira PGRST201 ("more than one relationship").
     final cuotasFuture = _client
         .from('cuotas_plataforma')
         .select(
-            'id, usuario_id, organizacion_id, mes, anio, monto, estado, fecha_vencimiento, fecha_pago, comprobante_url, metodo_pago, motivo, usuarios(nombre, rol)')
+            'id, usuario_id, organizacion_id, mes, anio, monto, estado, fecha_vencimiento, fecha_pago, comprobante_url, metodo_pago, motivo, usuarios!cuotas_plataforma_usuario_id_fkey(nombre, rol)')
         .eq('organizacion_id', organizacionId)
         .order('anio', ascending: false)
         .order('mes', ascending: false);

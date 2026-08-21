@@ -260,7 +260,9 @@ class _ParadaDetalleScreenState extends State<ParadaDetalleScreen> {
         builder: (_) => BalancePagosScreen(
           paradaId: widget.parada.id,
           paradaNombre: widget.parada.nombre,
+          organizacionId: widget.parada.organizacionId,
           service: _service,
+          mostrarCuotaPlataforma: true,
         ),
       ),
     );

@@ -6,13 +6,11 @@ import '../../../shared/models/usuario.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../data/cuota_plataforma_service.dart';
 
-const _meses = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-
 const _labelsEstado = {
   'pagado': 'Pagado',
-  'atrasado': 'Atrasado',
-  'pendiente': 'Pendiente',
   'exonerado': 'Exonerado',
+  'pendiente': 'Pendiente',
+  'moroso': 'Moroso',
 };
 
 const _labelsRol = {
@@ -23,9 +21,12 @@ const _labelsRol = {
 
 /// Panel del dueño de plataforma: cobro del servicio de TapePy en sí
 /// (distinto del panel de "Balance de pagos" interno de cada
-/// asociación). Acá genera el cargo del mes para una organización y ve
-/// quién está al día y quién en deuda, agrupado por parada -- puede
-/// además marcar a mano un pago o exonerar a alguien.
+/// asociación). Modelo autoservicio (pedido de Elias 2026-08-21): ya
+/// no se "genera" ningún cargo -- cada quien reporta su propio pago
+/// desde su Mis pagos. Acá el dueño solo ve el estado del mes en curso
+/// de toda la organización, agrupado por parada, puede editar el
+/// monto fijo mensual, y a mano marcar un pago (ej. cobrado en
+/// efectivo en persona) o exonerar a alguien.
 class CuotasPlataformaScreen extends StatefulWidget {
   final Usuario usuario;
   const CuotasPlataformaScreen({super.key, required this.usuario});
@@ -39,7 +40,7 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
   final _organizacionService = OrganizacionService();
   late Future<List<OrganizacionItem>> _organizacionesFuture;
   OrganizacionItem? _seleccionada;
-  Future<List<CuotaPlataformaItem>>? _cuotasFuture;
+  Future<List<EstadoCuotaPlataforma>>? _estadosFuture;
 
   @override
   void initState() {
@@ -50,56 +51,70 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
   void _seleccionar(OrganizacionItem organizacion) {
     setState(() {
       _seleccionada = organizacion;
-      _cuotasFuture = _cuotaService.cargarPorOrganizacion(organizacion.id);
+      _estadosFuture = _cuotaService.cargarEstadoOrganizacion(organizacion.id);
     });
   }
 
   void _refrescar() {
     if (_seleccionada == null) return;
     setState(() {
-      _cuotasFuture = _cuotaService.cargarPorOrganizacion(_seleccionada!.id);
+      _estadosFuture = _cuotaService.cargarEstadoOrganizacion(_seleccionada!.id);
     });
   }
 
-  Future<void> _generarCargo() async {
+  Future<void> _editarMonto() async {
     final organizacion = _seleccionada;
     if (organizacion == null) return;
-    final generado = await showModalBottomSheet<bool>(
+    final montoActual = await _cuotaService.obtenerMonto(organizacion.id);
+    if (!mounted) return;
+    final cambiado = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => _FormularioGenerarCargo(
+      builder: (context) => _FormularioEditarMonto(
         organizacionId: organizacion.id,
-        creadoPor: widget.usuario.id,
+        montoActual: montoActual,
         service: _cuotaService,
       ),
     );
-    if (generado == true) _refrescar();
+    if (cambiado == true) _refrescar();
   }
 
-  Future<void> _cambiarEstado(CuotaPlataformaItem cuota, String estado) async {
+  Future<void> _cambiarEstado(EstadoCuotaPlataforma estado, String nuevoEstado) async {
     try {
-      await _cuotaService.marcarEstado(cuotaId: cuota.id, estado: estado);
+      if (estado.cuotaId != null) {
+        await _cuotaService.marcarEstado(cuotaId: estado.cuotaId!, estado: nuevoEstado);
+      } else {
+        // Todavía no tiene ninguna fila del mes (autoservicio puro) --
+        // el override manual del dueño la crea directamente.
+        await _cuotaService.registrarManual(
+          usuarioId: estado.usuarioId,
+          estado: nuevoEstado,
+          registradoPor: widget.usuario.id,
+        );
+      }
       _refrescar();
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('No se pudo actualizar. Intentá de nuevo.')));
+      final mensaje = e is CuotaPlataformaException ? e.message : 'No se pudo actualizar. Intentá de nuevo.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Cuotas de plataforma')),
-      floatingActionButton: _seleccionada == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _generarCargo,
-              backgroundColor: AppTheme.rojoInstitucional,
-              icon: const Icon(Icons.add),
-              label: const Text('Generar cobro del mes'),
+      appBar: AppBar(
+        title: const Text('Cuotas de plataforma'),
+        actions: [
+          if (_seleccionada != null)
+            IconButton(
+              icon: const Icon(Icons.tune),
+              tooltip: 'Editar monto mensual',
+              onPressed: _editarMonto,
             ),
+        ],
+      ),
       body: FutureBuilder<List<OrganizacionItem>>(
         future: _organizacionesFuture,
         builder: (context, snapshot) {
@@ -111,7 +126,7 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
             return const Center(child: Text('Todavía no hay ninguna organización cargada.'));
           }
           _seleccionada ??= organizaciones.first;
-          _cuotasFuture ??= _cuotaService.cargarPorOrganizacion(_seleccionada!.id);
+          _estadosFuture ??= _cuotaService.cargarEstadoOrganizacion(_seleccionada!.id);
 
           return Column(
             children: [
@@ -134,17 +149,17 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
                 ),
               ),
               Expanded(
-                child: FutureBuilder<List<CuotaPlataformaItem>>(
-                  future: _cuotasFuture,
-                  builder: (context, snapshotCuotas) {
-                    if (snapshotCuotas.connectionState == ConnectionState.waiting) {
+                child: FutureBuilder<List<EstadoCuotaPlataforma>>(
+                  future: _estadosFuture,
+                  builder: (context, snapshotEstados) {
+                    if (snapshotEstados.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    if (snapshotCuotas.hasError) {
-                      return Center(child: Text('No se pudo cargar: ${snapshotCuotas.error}'));
+                    if (snapshotEstados.hasError) {
+                      return Center(child: Text('No se pudo cargar: ${snapshotEstados.error}'));
                     }
-                    final cuotas = snapshotCuotas.data ?? [];
-                    if (cuotas.isEmpty) {
+                    final estados = snapshotEstados.data ?? [];
+                    if (estados.isEmpty) {
                       return ListView(
                         children: [
                           Padding(
@@ -155,7 +170,7 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
                                     size: 48, color: Theme.of(context).colorScheme.outline),
                                 const SizedBox(height: 12),
                                 const Text(
-                                  'Todavía no generaste ningún cobro para esta organización',
+                                  'Todavía no hay miembros pagadores en esta organización',
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -164,19 +179,18 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
                         ],
                       );
                     }
-                    final grupos = _cuotaService.agruparPorParada(cuotas);
-                    final totalEnDeuda = cuotas.where((c) => c.enDeuda).length;
+                    final grupos = _cuotaService.agruparPorParada(estados);
+                    final totalEnDeuda = estados.where((e) => e.enDeuda).length;
 
                     return ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        _ResumenOrganizacion(total: cuotas.length, enDeuda: totalEnDeuda),
+                        _ResumenOrganizacion(total: estados.length, enDeuda: totalEnDeuda),
                         const SizedBox(height: 16),
                         ...grupos.map((grupo) => _GrupoParadaCard(
                               grupo: grupo,
                               onCambiarEstado: _cambiarEstado,
                             )),
-                        const SizedBox(height: 72),
                       ],
                     );
                   },
@@ -207,7 +221,7 @@ class _ResumenOrganizacion extends StatelessWidget {
         Expanded(
           child: _StatMini(
             valor: '$enDeuda',
-            etiqueta: 'En deuda',
+            etiqueta: 'Morosos',
             color: enDeuda > 0 ? AppTheme.estadoUrgente : Theme.of(context).colorScheme.outline,
           ),
         ),
@@ -247,8 +261,8 @@ class _StatMini extends StatelessWidget {
 }
 
 class _GrupoParadaCard extends StatelessWidget {
-  final GrupoCuotasPorParada grupo;
-  final void Function(CuotaPlataformaItem cuota, String estado) onCambiarEstado;
+  final GrupoEstadoCuotaPlataforma grupo;
+  final void Function(EstadoCuotaPlataforma estado, String nuevoEstado) onCambiarEstado;
   const _GrupoParadaCard({required this.grupo, required this.onCambiarEstado});
 
   @override
@@ -260,43 +274,40 @@ class _GrupoParadaCard extends StatelessWidget {
         leading: IconBadge(icono: Icons.location_pin, color: colorBadge, diametro: 40),
         title: Text(grupo.paradaNombre ?? 'Sin parada asignada'),
         subtitle: Text(
-          grupo.enDeuda > 0 ? '${grupo.enDeuda} de ${grupo.total} en deuda' : 'Todos al día (${grupo.total})',
+          grupo.enDeuda > 0 ? '${grupo.enDeuda} de ${grupo.total} morosos' : 'Todos al día (${grupo.total})',
           style: TextStyle(color: colorBadge, fontWeight: FontWeight.w600),
         ),
-        children: grupo.cuotas.map((cuota) => _CuotaRow(cuota: cuota, onCambiarEstado: onCambiarEstado)).toList(),
+        children: grupo.estados.map((e) => _EstadoRow(estado: e, onCambiarEstado: onCambiarEstado)).toList(),
       ),
     );
   }
 }
 
-class _CuotaRow extends StatelessWidget {
-  final CuotaPlataformaItem cuota;
-  final void Function(CuotaPlataformaItem cuota, String estado) onCambiarEstado;
-  const _CuotaRow({required this.cuota, required this.onCambiarEstado});
+class _EstadoRow extends StatelessWidget {
+  final EstadoCuotaPlataforma estado;
+  final void Function(EstadoCuotaPlataforma estado, String nuevoEstado) onCambiarEstado;
+  const _EstadoRow({required this.estado, required this.onCambiarEstado});
 
   Color get _color {
-    if (cuota.enDeuda) return AppTheme.estadoUrgente;
-    switch (cuota.estado) {
+    switch (estado.estado) {
       case 'pagado':
       case 'exonerado':
         return AppTheme.estadoOk;
-      case 'pendiente':
-        return AppTheme.estadoAtencion;
+      case 'moroso':
+        return AppTheme.estadoUrgente;
       default:
-        return Colors.grey;
+        return AppTheme.estadoAtencion;
     }
   }
-
-  String get _labelEstado => cuota.enDeuda ? 'Atrasado' : (_labelsEstado[cuota.estado] ?? cuota.estado);
 
   @override
   Widget build(BuildContext context) {
     final formatoMonto = NumberFormat.decimalPattern('es');
     return ListTile(
       dense: true,
-      title: Text(cuota.usuarioNombre ?? 'Usuario'),
+      title: Text(estado.nombre ?? 'Usuario'),
       subtitle: Text(
-        '${_labelsRol[cuota.usuarioRol] ?? cuota.usuarioRol ?? ''} · ${_meses[cuota.mes]} ${cuota.anio} · ₲ ${formatoMonto.format(cuota.monto)}',
+        '${_labelsRol[estado.rol] ?? estado.rol ?? ''} · ₲ ${formatoMonto.format(estado.monto)}',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -307,14 +318,13 @@ class _CuotaRow extends StatelessWidget {
               color: _color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(_labelEstado, style: TextStyle(color: _color, fontWeight: FontWeight.w600, fontSize: 11)),
+            child: Text(_labelsEstado[estado.estado] ?? estado.estado,
+                style: TextStyle(color: _color, fontWeight: FontWeight.w600, fontSize: 11)),
           ),
           PopupMenuButton<String>(
-            onSelected: (estado) => onCambiarEstado(cuota, estado),
+            onSelected: (nuevoEstado) => onCambiarEstado(estado, nuevoEstado),
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'pagado', child: Text('Marcar pagado')),
-              PopupMenuItem(value: 'pendiente', child: Text('Marcar pendiente')),
-              PopupMenuItem(value: 'atrasado', child: Text('Marcar atrasado')),
               PopupMenuItem(value: 'exonerado', child: Text('Exonerar')),
             ],
           ),
@@ -324,23 +334,19 @@ class _CuotaRow extends StatelessWidget {
   }
 }
 
-class _FormularioGenerarCargo extends StatefulWidget {
+class _FormularioEditarMonto extends StatefulWidget {
   final String organizacionId;
-  final String creadoPor;
+  final double montoActual;
   final CuotaPlataformaService service;
-  const _FormularioGenerarCargo({required this.organizacionId, required this.creadoPor, required this.service});
+  const _FormularioEditarMonto({required this.organizacionId, required this.montoActual, required this.service});
 
   @override
-  State<_FormularioGenerarCargo> createState() => _FormularioGenerarCargoState();
+  State<_FormularioEditarMonto> createState() => _FormularioEditarMontoState();
 }
 
-class _FormularioGenerarCargoState extends State<_FormularioGenerarCargo> {
-  final _montoController = TextEditingController();
-  final _hoy = DateTime.now();
-  late int _mes = _hoy.month;
-  late int _anio = _hoy.year;
-  DateTime _fechaVencimiento = DateTime(DateTime.now().year, DateTime.now().month, 10);
-  bool _generando = false;
+class _FormularioEditarMontoState extends State<_FormularioEditarMonto> {
+  late final _montoController = TextEditingController(text: widget.montoActual.toStringAsFixed(0));
+  bool _guardando = false;
   String? _error;
 
   @override
@@ -349,52 +355,29 @@ class _FormularioGenerarCargoState extends State<_FormularioGenerarCargo> {
     super.dispose();
   }
 
-  Future<void> _elegirFechaVencimiento() async {
-    final fecha = await showDatePicker(
-      context: context,
-      initialDate: _fechaVencimiento,
-      firstDate: DateTime(_hoy.year - 1),
-      lastDate: DateTime(_hoy.year + 1),
-    );
-    if (fecha != null) setState(() => _fechaVencimiento = fecha);
-  }
-
-  Future<void> _generar() async {
+  Future<void> _guardar() async {
     final monto = double.tryParse(_montoController.text.replaceAll(',', '.'));
     if (monto == null || monto <= 0) {
       setState(() => _error = 'Ingresá un monto válido');
       return;
     }
     setState(() {
-      _generando = true;
+      _guardando = true;
       _error = null;
     });
     try {
-      final cantidad = await widget.service.generarCargoMensual(
-        organizacionId: widget.organizacionId,
-        mes: _mes,
-        anio: _anio,
-        monto: monto,
-        fechaVencimiento: _fechaVencimiento,
-        creadoPor: widget.creadoPor,
-      );
+      await widget.service.editarMonto(organizacionId: widget.organizacionId, monto: monto);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Se generó el cargo para $cantidad miembros (los que ya lo tenían no se duplican).')),
-      );
       Navigator.of(context).pop(true);
-    } on CuotaPlataformaException catch (e) {
-      setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'No se pudo generar el cargo. Intentá de nuevo.');
+      setState(() => _error = 'No se pudo guardar. Intentá de nuevo.');
     } finally {
-      if (mounted) setState(() => _generando = false);
+      if (mounted) setState(() => _guardando = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final formatoFecha = DateFormat('dd/MM/yyyy');
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -406,47 +389,18 @@ class _FormularioGenerarCargoState extends State<_FormularioGenerarCargo> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Generar cobro del mes', style: Theme.of(context).textTheme.titleLarge),
+          Text('Monto mensual de la cuota', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
           Text(
-            'Se crea un cargo individual para cada presidente de asociación, presidente de parada y conductor de esta organización.',
+            'Lo que cada persona paga por mes. Días 1 al 15 son de gracia; desde el 16, quien no pagó aparece como moroso.',
             style:
                 Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  value: _mes,
-                  decoration: const InputDecoration(labelText: 'Mes', border: OutlineInputBorder(), isDense: true),
-                  items: List.generate(
-                      12, (i) => DropdownMenuItem(value: i + 1, child: Text(_meses[i + 1]))),
-                  onChanged: (v) => setState(() => _mes = v!),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextFormField(
-                  initialValue: '$_anio',
-                  decoration: const InputDecoration(labelText: 'Año', border: OutlineInputBorder(), isDense: true),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) => _anio = int.tryParse(v) ?? _anio,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           TextField(
             controller: _montoController,
             decoration: const InputDecoration(labelText: 'Monto (₲)', border: OutlineInputBorder(), isDense: true),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _elegirFechaVencimiento,
-            icon: const Icon(Icons.event_outlined),
-            label: Text('Vence: ${formatoFecha.format(_fechaVencimiento)}'),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -454,12 +408,12 @@ class _FormularioGenerarCargoState extends State<_FormularioGenerarCargo> {
           ],
           const SizedBox(height: 20),
           FilledButton(
-            onPressed: _generando ? null : _generar,
+            onPressed: _guardando ? null : _guardar,
             style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
-            child: _generando
+            child: _guardando
                 ? const SizedBox(
                     height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Generar'),
+                : const Text('Guardar'),
           ),
         ],
       ),

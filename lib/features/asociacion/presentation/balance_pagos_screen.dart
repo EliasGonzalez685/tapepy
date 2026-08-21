@@ -6,6 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/icon_badge.dart';
+import '../../plataforma/data/cuota_plataforma_service.dart';
 import '../data/balance_pagos.dart';
 import '../data/parada_detalle_service.dart';
 
@@ -33,12 +35,21 @@ const _meses = [
 class BalancePagosScreen extends StatefulWidget {
   final String paradaId;
   final String paradaNombre;
+  final String organizacionId;
   final ParadaDetalleService service;
+  // La RPC que trae el estado de cuota de plataforma solo autoriza al
+  // dueño o al presidente de ASOCIACIÓN (pedido de Elias 2026-08-21:
+  // ese estado ajeno solo lo ven esos dos roles, no el presidente de
+  // parada) -- este flag lo prende el llamador según quién está
+  // mirando, para no pedirle la RPC a quien la base le va a rechazar.
+  final bool mostrarCuotaPlataforma;
   const BalancePagosScreen({
     super.key,
     required this.paradaId,
     required this.paradaNombre,
+    required this.organizacionId,
     required this.service,
+    this.mostrarCuotaPlataforma = false,
   });
 
   @override
@@ -46,7 +57,9 @@ class BalancePagosScreen extends StatefulWidget {
 }
 
 class _BalancePagosScreenState extends State<BalancePagosScreen> {
+  final _servicioPlataforma = CuotaPlataformaService();
   late Future<BalancePagosParada> _future;
+  Future<List<EstadoCuotaPlataforma>>? _futurePlataforma;
   bool _generandoPdf = false;
 
   @override
@@ -57,6 +70,16 @@ class _BalancePagosScreenState extends State<BalancePagosScreen> {
 
   void _cargar() {
     _future = widget.service.cargarCuotasParaBalance(widget.paradaId).then(calcularBalancePagos);
+    if (widget.mostrarCuotaPlataforma) {
+      // Cuota de plataforma de TODA la organización, filtrada acá a
+      // los miembros de esta parada -- la RPC ya devuelve el estado
+      // del mes en curso calculado (pagado/exonerado/pendiente/
+      // moroso), incluso para quien nunca tuvo ninguna fila
+      // (autoservicio puro, sin cargo pre-generado).
+      _futurePlataforma = _servicioPlataforma.cargarEstadoOrganizacion(widget.organizacionId).then(
+            (estados) => estados.where((e) => e.paradaId == widget.paradaId).toList(),
+          );
+    }
   }
 
   Future<void> _generarPdf(BalancePagosParada balance) async {
@@ -138,6 +161,35 @@ class _BalancePagosScreenState extends State<BalancePagosScreen> {
               Text('Por conductor', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               _TablaPorConductor(balance: balance, formatoMonto: formatoMonto),
+              if (_futurePlataforma != null) ...[
+                const SizedBox(height: 24),
+                Text('Cuota de plataforma', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  'Lo que cada quien le debe a TapePy por el servicio -- este mes.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
+                FutureBuilder<List<EstadoCuotaPlataforma>>(
+                  future: _futurePlataforma,
+                  builder: (context, snapshotPlataforma) {
+                    if (snapshotPlataforma.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    final estados = snapshotPlataforma.data ?? [];
+                    if (estados.isEmpty) {
+                      return const Text('Todavía no hay nadie en esta parada.');
+                    }
+                    return _TablaCuotaPlataforma(estados: estados, formatoMonto: formatoMonto);
+                  },
+                ),
+              ],
             ],
           );
         },
@@ -330,6 +382,56 @@ class _TablaPorConductor extends StatelessWidget {
                       style:
                           const TextStyle(color: AppTheme.estadoUrgente, fontWeight: FontWeight.w600, fontSize: 12)),
               ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _TablaCuotaPlataforma extends StatelessWidget {
+  final List<EstadoCuotaPlataforma> estados;
+  final NumberFormat formatoMonto;
+  const _TablaCuotaPlataforma({required this.estados, required this.formatoMonto});
+
+  Color _color(String estado) {
+    switch (estado) {
+      case 'pagado':
+      case 'exonerado':
+        return AppTheme.estadoOk;
+      case 'moroso':
+        return AppTheme.estadoUrgente;
+      default:
+        return AppTheme.estadoAtencion;
+    }
+  }
+
+  String _label(String estado) {
+    const labels = {
+      'pagado': 'Pagado',
+      'exonerado': 'Exonerado',
+      'pendiente': 'Pendiente',
+      'moroso': 'Moroso',
+    };
+    return labels[estado] ?? estado;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: estados.map((e) {
+        final color = _color(e.estado);
+        return Card(
+          margin: const EdgeInsets.only(bottom: 6),
+          child: ListTile(
+            leading: IconBadge(icono: Icons.workspace_premium_outlined, color: color, diametro: 40),
+            title: Text(e.nombre ?? ''),
+            subtitle: Text('₲ ${formatoMonto.format(e.monto)}'),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+              child: Text(_label(e.estado), style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12)),
             ),
           ),
         );

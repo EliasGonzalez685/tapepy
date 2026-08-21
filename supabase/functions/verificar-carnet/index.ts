@@ -116,7 +116,7 @@ Deno.serve(async (req: Request) => {
   const { data: usuario, error } = await supabase
     .from('usuarios')
     .select(
-      'nombre, cedula, rol, foto_perfil_url, activo, cuenta_confirmada, bloqueado, carnet_vencimiento, ' +
+      'id, nombre, cedula, rol, foto_perfil_url, activo, cuenta_confirmada, bloqueado, carnet_vencimiento, ' +
       'organizaciones(nombre), conductores(paradas(nombre))',
     )
     .eq('qr_token', token)
@@ -128,7 +128,17 @@ Deno.serve(async (req: Request) => {
 
   const hoy = new Date().toISOString().slice(0, 10);
   const carnetVigente = !usuario.carnet_vencimiento || usuario.carnet_vencimiento >= hoy;
-  const vigente = usuario.activo && usuario.cuenta_confirmada && !usuario.bloqueado && carnetVigente;
+
+  // En deuda con la plataforma (cuota_plataforma atrasada, o pendiente
+  // con vencimiento ya pasado) también invalida el carnet -- mismo
+  // mensaje genérico de siempre, la página pública nunca dice que es
+  // por deuda (pedido de Elias 2026-08-21).
+  const { data: enDeuda } = await supabase.rpc('usuario_en_deuda_plataforma', {
+    p_usuario_id: usuario.id as string,
+  });
+
+  const vigente =
+    usuario.activo && usuario.cuenta_confirmada && !usuario.bloqueado && carnetVigente && !enDeuda;
 
   if (!vigente) {
     return paginaInvalida();

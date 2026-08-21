@@ -10,6 +10,7 @@ import '../../features/ayuda/presentation/info_aplicacion_screen.dart';
 import '../../features/ayuda/presentation/comentarios_screen.dart';
 import '../../features/ayuda/presentation/condiciones_privacidad_screen.dart';
 import '../../features/ayuda/presentation/centro_ayuda_screen.dart';
+import '../../features/plataforma/presentation/mi_cuota_plataforma_screen.dart';
 import '../models/user_role.dart';
 import '../models/usuario.dart';
 
@@ -169,6 +170,24 @@ class MenuLateral extends StatelessWidget {
                       },
                     ),
                   ],
+                  // Cuota de plataforma: lo que cada persona le paga al
+                  // dueño de la plataforma por el servicio de TapePy en
+                  // sí (distinto de "Mis pagos", que es interno a la
+                  // asociación/parada). Pagan presidente de asociación,
+                  // presidente de parada y conductor -- el dueño no se
+                  // cobra a sí mismo, y superadmin no es un socio real.
+                  if (usuario?.rol != UserRole.duenoPlataforma && usuario?.rol != UserRole.superadmin)
+                    ItemMenuLateral(
+                      icono: Icons.workspace_premium_outlined,
+                      titulo: 'Cuota de plataforma',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (usuario == null) return;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => MiCuotaPlataformaScreen(usuario: usuario!)),
+                        );
+                      },
+                    ),
                   // La constancia certifica que alguien es socio
                   // propietario o chofer de una línea de transporte —
                   // solo tiene sentido para el conductor pedirla sobre

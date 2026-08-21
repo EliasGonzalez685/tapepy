@@ -6,6 +6,7 @@ import '../../../shared/widgets/menu_lateral.dart';
 import '../../asociacion/presentation/asociacion_home_screen.dart';
 import '../data/presidente_asociacion_service.dart';
 import 'cuentas_bloqueadas_screen.dart';
+import 'cuotas_plataforma_screen.dart';
 
 /// Home del dueño de plataforma (Elias): es prácticamente el mismo
 /// panel que ve el presidente de asociación (paradas, solicitudes,
@@ -91,6 +92,20 @@ class _DuenoPlataformaHomeScreenState extends State<DuenoPlataformaHomeScreen> {
                 Navigator.of(context).pop();
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const CuentasBloqueadasScreen()),
+                );
+              },
+            ),
+            ItemMenuLateral(
+              icono: Icons.workspace_premium_outlined,
+              titulo: 'Cuotas de plataforma',
+              onTap: () {
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                if (widget.usuario == null) return;
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (_) => CuotasPlataformaScreen(usuario: widget.usuario!),
+                  ),
                 );
               },
             ),

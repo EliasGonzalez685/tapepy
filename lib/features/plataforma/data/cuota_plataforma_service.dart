@@ -165,12 +165,12 @@ class CuotaPlataformaService {
     required String organizacionId,
   }) async {
     final hoy = DateTime.now();
-    final orgFuture =
-        _client.from('organizaciones').select('cuota_plataforma_monto').eq('id', organizacionId).single();
-    final historialFuture = cargarMia(usuarioId);
-    final resultados = await Future.wait([orgFuture, historialFuture]);
-    final org = resultados[0] as Map<String, dynamic>;
-    final historial = resultados[1] as List<CuotaPlataformaItem>;
+    final org = await _client
+        .from('organizaciones')
+        .select('cuota_plataforma_monto')
+        .eq('id', organizacionId)
+        .single();
+    final historial = await cargarMia(usuarioId);
     final montoConfigurado = (org['cuota_plataforma_monto'] as num?)?.toDouble() ?? 50000;
 
     CuotaPlataformaItem? actual;

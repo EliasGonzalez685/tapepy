@@ -52,7 +52,8 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
 
   Future<void> _refrescar() async {
     setState(_cargar);
-    await Future.wait([_future, if (_futurePlataforma != null) _futurePlataforma!]);
+    await _future;
+    if (_futurePlataforma != null) await _futurePlataforma;
   }
 
   Future<void> _reportarPago(CuotaPropia cuota) async {

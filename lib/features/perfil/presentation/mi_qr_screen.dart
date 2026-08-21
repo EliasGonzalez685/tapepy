@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/config/supabase_config.dart';
-import '../../../core/theme/app_theme.dart';
 import '../data/perfil_service.dart';
 
 /// Vista rápida del código QR, aparte del carnet completo — pensada para
@@ -73,27 +72,6 @@ class _MiQrScreenState extends State<MiQrScreen> {
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   Text(datos.rolLabel,
                       style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.rojoInstitucional.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.info_outline, size: 16, color: AppTheme.rojoInstitucional),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'La verificación por escaneo se habilita más adelante.',
-                            style: TextStyle(color: AppTheme.rojoInstitucional, fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),

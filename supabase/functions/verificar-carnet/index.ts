@@ -21,6 +21,21 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const ROJO = '#8B0000';
 
+// Supabase fuerza el Content-Type de las Edge Functions a text/plain en
+// el dominio *.supabase.co por defecto (limitación conocida de la
+// plataforma, no hay forma de evitarlo sin dominio propio -- ver
+// discusión github.com/orgs/supabase/discussions/35627). Por eso el QR
+// no apunta acá directo: apunta a una paginita estática en GitHub Pages
+// (docs/verificar-carnet.html) que le pide estos datos a esta función
+// por fetch() y los renderiza ella misma con Content-Type correcto.
+// Access-Control-Allow-Origin abierto porque ese fetch es cross-origin
+// (github.io -> supabase.co) y esta función ya expone estos mismos
+// datos públicamente igual, sin login.
+const HTML_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Access-Control-Allow-Origin': '*',
+};
+
 function escapeHtml(valor: string): string {
   return valor
     .replaceAll('&', '&amp;')
@@ -97,7 +112,7 @@ function paginaInvalida(): Response {
     <div class="invalido">⚠️</div>
     <div class="invalido-texto">Este código no corresponde a un carnet válido y vigente.</div>
   `);
-  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  return new Response(html, { status: 200, headers: HTML_HEADERS });
 }
 
 Deno.serve(async (req: Request) => {
@@ -167,5 +182,5 @@ Deno.serve(async (req: Request) => {
     <div class="vigente">✓ CARNET VIGENTE</div>
   `);
 
-  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  return new Response(html, { status: 200, headers: HTML_HEADERS });
 });

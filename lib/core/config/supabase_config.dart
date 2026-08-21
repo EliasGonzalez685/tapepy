@@ -22,10 +22,18 @@ class SupabaseConfig {
 
   static SupabaseClient get client => Supabase.instance.client;
 
-  /// URL pública de verificación de carnet (Edge Function
-  /// `verificar-carnet`, sin login): es lo que codifica el QR del
-  /// carnet digital, para que cualquier lector de QR del teléfono la
-  /// abra directo, sin necesidad de tener la app instalada.
+  /// URL pública de verificación de carnet: es lo que codifica el QR
+  /// del carnet digital, para que cualquier lector de QR del teléfono
+  /// la abra directo, sin necesidad de tener la app instalada.
+  ///
+  /// Apunta a la páginita estática en GitHub Pages (docs/
+  /// verificar-carnet.html), NO directo a la Edge Function
+  /// `verificar-carnet` -- el dominio *.supabase.co fuerza el
+  /// Content-Type de las Edge Functions a text/plain (limitación de la
+  /// plataforma, ver comentario en esa función), así que un link
+  /// directo mostraría el HTML como texto plano en vez de renderizarlo.
+  /// La página de GitHub Pages le pide los datos a esa función por
+  /// fetch() y sí los renderiza bien.
   static String urlVerificacionCarnet(String qrToken) =>
-      '${dotenv.env['SUPABASE_URL']}/functions/v1/verificar-carnet?token=$qrToken';
+      'https://eliasgonzalez685.github.io/tapepy/verificar-carnet.html?token=$qrToken';
 }

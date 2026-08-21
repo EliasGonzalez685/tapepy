@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verificación de carnet - TapePy</title>
+<!--
+  Cascarón estático (GitHub Pages) para el QR del carnet digital.
+
+  Por qué existe: la Edge Function de Supabase que arma la página real
+  (verificar-carnet) vive en el dominio *.supabase.co, y ese dominio
+  fuerza el Content-Type de las respuestas a text/plain sin importar lo
+  que la función declare -- limitación conocida de la plataforma, sin
+  arreglo salvo pagar por un dominio propio (github.com/orgs/supabase/
+  discussions/35627). Como esta página SÍ se sirve con el Content-Type
+  correcto (GitHub Pages), le pide los datos a la función por fetch()
+  y los muestra ella misma dentro de un <iframe srcdoc="...">, que
+  renderiza el HTML recibido sin importarle el header original.
+
+  El QR de la app apunta acá (ver SupabaseConfig.urlVerificacionCarnet),
+  no directo a la función.
+-->
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #f4f4f5;
+  }
+  #cargando {
+    height: 100vh; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; color: #757575; font-size: 14px; text-align: center; padding: 24px;
+  }
+  #resultado {
+    display: none; border: 0; width: 100%; height: 100vh;
+  }
+  #spinner {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 3px solid #e0e0e0; border-top-color: #8B0000;
+    animation: girar 0.8s linear infinite; margin-bottom: 14px;
+  }
+  @keyframes girar { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div id="cargando">
+    <div id="spinner"></div>
+    <div>Verificando carnet…</div>
+  </div>
+  <iframe id="resultado" title="Resultado de verificación"></iframe>
+
+  <script>
+    var FUNCION_URL = 'https://rydpjayylntksqrwimmn.supabase.co/functions/v1/verificar-carnet';
+
+    function mostrarError() {
+      document.getElementById('cargando').innerHTML =
+        '<div style="font-size:40px;margin-bottom:10px;">⚠️</div>' +
+        '<div>No se pudo verificar el carnet.<br>Revisá tu conexión e intentá de nuevo.</div>';
+    }
+
+    var params = new URLSearchParams(window.location.search);
+    var token = params.get('token');
+
+    if (!token) {
+      mostrarError();
+    } else {
+      fetch(FUNCION_URL + '?token=' + encodeURIComponent(token))
+        .then(function (respuesta) {
+          if (!respuesta.ok) throw new Error('respuesta no ok');
+          return respuesta.text();
+        })
+        .then(function (html) {
+          var iframe = document.getElementById('resultado');
+          iframe.srcdoc = html;
+          document.getElementById('cargando').style.display = 'none';
+          iframe.style.display = 'block';
+        })
+        .catch(mostrarError);
+    }
+  </script>
+</body>
+</html>

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/usuario.dart';
-import '../../../shared/utils/imprimir_documento.dart';
 import '../../../shared/widgets/badge_en_servicio.dart';
 import '../../../shared/models/user_role.dart';
 import '../../../shared/widgets/icon_badge.dart';
+import '../../../shared/widgets/documentos_agrupados_list.dart';
 import '../../../shared/widgets/documentos_conductor_sheet.dart';
 import '../../../shared/widgets/vehiculos_conductor_sheet.dart';
 import '../data/lote_pago_service.dart';
@@ -334,10 +334,10 @@ class _ParadaDetalleScreenState extends State<ParadaDetalleScreen> {
           children: [
             const _AvisoSoloLectura(
               texto: 'Cada conductor sube sus propios documentos y es responsable '
-                  'de lo que falte. Tocá un documento para abrirlo o imprimirlo.',
+                  'de lo que falte. Tocá un conductor para ver todos sus documentos.',
             ),
             const SizedBox(height: 12),
-            _SeccionDocumentos(future: _documentosFuture, service: _service),
+            DocumentosAgrupadosList(future: _documentosFuture, service: _service),
           ],
         );
       case _Seccion.incidentes:
@@ -736,115 +736,6 @@ class _SeccionCuotas extends StatelessWidget {
                       style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _SeccionDocumentos extends StatelessWidget {
-  final Future<List<DocumentoItem>> future;
-  final ParadaDetalleService service;
-  const _SeccionDocumentos({super.key, required this.future, required this.service});
-
-  Color _colorEstado(String estado) {
-    switch (estado) {
-      case 'vigente':
-        return AppTheme.estadoOk;
-      case 'por_vencer':
-        return AppTheme.estadoAtencion;
-      case 'vencido':
-        return AppTheme.estadoUrgente;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _labelEstado(String estado) {
-    const labels = {'vigente': 'Vigente', 'por_vencer': 'Por vencer', 'vencido': 'Vencido'};
-    return labels[estado] ?? estado;
-  }
-
-  String _labelTipo(String tipo) {
-    const labels = {
-      'cedula': 'Cédula',
-      'licencia_conducir': 'Licencia de conducir',
-      'antecedentes_policiales': 'Antecedentes policiales',
-      'seguro_vehicular': 'Seguro vehicular',
-      'revision_tecnica': 'Revisión técnica',
-      'carta_verde': 'Carta verde',
-      'habilitacion_vehicular': 'Habilitación vehicular',
-      'cedula_verde': 'Cédula verde',
-      'habilitacion_municipal': 'Habilitación municipal',
-      'otro': 'Otro documento',
-    };
-    return labels[tipo] ?? tipo;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final formatoFecha = DateFormat('dd/MM/yyyy');
-    return _ListaAsync<DocumentoItem>(
-      future: future,
-      vacioIcono: Icons.description_outlined,
-      vacioTexto: 'No hay documentos por revisar en esta parada',
-      itemBuilder: (item) {
-        final color = _colorEstado(item.estado);
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => imprimirArchivoDocumento(
-              context: context,
-              obtenerUrlFirmada: service.obtenerUrlFirmada,
-              path: item.archivoUrl,
-              nombreSugerido: item.nombreArchivo ?? '${_labelTipo(item.tipo)}.pdf',
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  IconBadge(icono: Icons.description_outlined, color: color, diametro: 44),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${item.entidad} · ${_labelTipo(item.tipo)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w600)),
-                        if (item.fechaVencimiento != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            'Vence ${formatoFecha.format(item.fechaVencimiento!)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      _labelEstado(item.estado),
-                      style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(Icons.print_outlined, color: Theme.of(context).colorScheme.outline, size: 20),
                 ],
               ),
             ),

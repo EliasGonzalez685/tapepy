@@ -182,6 +182,11 @@ class DocumentoItem {
   final String archivoUrl;
   final String? nombreArchivo;
   final String? descripcion;
+  // null para documentos de la parada -- solo los de conductor lo
+  // traen, para poder agruparlos por persona en vez de mostrar una fila
+  // repetida por documento (pedido de Elias 2026-08-22: con muchos
+  // conductores cargados la lista plana se vuelve inmanejable).
+  final String? conductorId;
 
   DocumentoItem({
     required this.id,
@@ -192,6 +197,7 @@ class DocumentoItem {
     this.fechaVencimiento,
     this.nombreArchivo,
     this.descripcion,
+    this.conductorId,
   });
 }
 
@@ -598,7 +604,7 @@ class ParadaDetalleService {
     final docsConductor = await _client
         .from('documentos_conductor')
         .select(
-            'id, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo, descripcion, conductores!inner(parada_id, usuarios(nombre))')
+            'id, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo, descripcion, conductores!inner(id, parada_id, usuarios(nombre))')
         .eq('conductores.parada_id', paradaId);
 
     final docsParada = await _client
@@ -623,6 +629,7 @@ class ParadaDetalleService {
         fechaVencimiento: map['fecha_vencimiento'] != null
             ? DateTime.parse(map['fecha_vencimiento'] as String)
             : null,
+        conductorId: conductor?['id'] as String?,
       ));
     }
 

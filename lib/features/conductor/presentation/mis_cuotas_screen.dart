@@ -14,14 +14,16 @@ const _meses = [
 
 /// Pantalla única de "Mis pagos": junta las cuotas internas (las carga
 /// el presidente, ver [CuotaPropia]) y la cuota de plataforma
-/// (autoservicio, ver [CuotaPlataformaService]) -- pero SIN un botón de
-/// "Reportar pago" separado para cada una. Un solo botón "Registrar
-/// pago" (FAB) abre un selector con las opciones pendientes (ej. "Pago
-/// a plataforma", o cada cuota interna por motivo/mes) y de ahí sigue
-/// el mismo formulario de siempre (método efectivo/transferencia +
-/// comprobante si corresponde). Pedido explícito de Elias
-/// (2026-08-22): quería el botón único con opciones "como ya existía
-/// antes", no una sección aparte para cada cosa.
+/// (autoservicio, ver [CuotaPlataformaService]). Un solo botón
+/// "Registrar pago" (FAB) abre UN formulario -- misma estructura que
+/// "Subir documento": un menú desplegable con las opciones reales
+/// (plataforma si no está al día, cada cuota interna pendiente/
+/// atrasada) y "Otro pago" siempre al final para lo que no esté en la
+/// lista, con descripción libre. El monto es SIEMPRE editable ahí
+/// mismo, sin importar qué opción se elija. Pedido explícito de Elias
+/// (2026-08-22, 2ª vuelta): quería que fuera un solo menú desplegable
+/// como en documentos, no un selector aparte que abre un formulario
+/// distinto según lo elegido.
 class MisCuotasScreen extends StatefulWidget {
   final Usuario usuario;
   const MisCuotasScreen({super.key, required this.usuario});
@@ -57,42 +59,38 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
 
   void _refrescar() => setState(_cargar);
 
-  Future<void> _reportarPago(CuotaPropia cuota) async {
-    final reportado = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => _FormularioReportarPago(
-        cuota: cuota,
-        usuario: widget.usuario,
-        service: _service,
-      ),
-    );
-    if (reportado == true) _refrescar();
-  }
-
-  Future<void> _reportarPagoPlataforma({required double montoSugerido}) async {
+  /// Abre UN solo formulario -- misma estructura que "Subir documento":
+  /// un menú desplegable con las opciones reales -- plataforma si no
+  /// está al día, cada cuota interna pendiente/atrasada -- y "Otro
+  /// pago" siempre al final para lo que no esté en la lista, con
+  /// descripción libre. El monto es SIEMPRE editable ahí mismo, sin
+  /// pasos intermedios. Pedido de Elias 2026-08-22 (2ª vuelta): antes
+  /// era un selector aparte que abría un formulario distinto según lo
+  /// elegido -- quería que fuera un solo menú desplegable, como
+  /// documentos.
+  Future<void> _abrirFormularioPago(List<_OpcionPago> opciones) async {
     final organizacionId = widget.usuario.organizacionId;
     if (organizacionId == null) return;
     final reportado = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => _FormularioReportarPagoPlataforma(
-        usuarioId: widget.usuario.id,
-        organizacionId: organizacionId,
-        montoSugerido: montoSugerido,
-        service: _servicioPlataforma,
+      builder: (context) => _FormularioRegistrarPago(
+        opciones: opciones,
+        usuario: widget.usuario,
+        service: _service,
+        servicioPlataforma: _servicioPlataforma,
       ),
     );
     if (reportado == true) _refrescar();
   }
 
-  /// El botón único: junta lo que falta pagar (plataforma -- siempre
-  /// aparece como opción mientras no esté al día, es obligatoria -- +
-  /// cada cuota interna pendiente/atrasada) y además deja elegir "Otro
-  /// pago" para declarar algo con motivo y monto libres. Elegís una
-  /// opción y ahí sigue el formulario de siempre.
+  /// El botón único del FAB: junta lo que falta pagar (plataforma --
+  /// siempre aparece como opción mientras no esté al día, es
+  /// obligatoria -- + cada cuota interna pendiente/atrasada) y agrega
+  /// "Otro pago" al final para declarar algo con motivo y monto
+  /// libres. Todo eso se ofrece como opciones dentro del mismo
+  /// formulario, no en un selector aparte.
   Future<void> _elegirQuePagar() async {
     List<CuotaPropia> pendientesInternas = [];
     try {
@@ -115,36 +113,17 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
       _OpcionPago.otro(),
     ];
 
-    final elegida = await showModalBottomSheet<_OpcionPago>(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => _SelectorPagoSheet(opciones: opciones),
-    );
-    if (elegida == null) return;
-    if (elegida.esPlataforma) {
-      await _reportarPagoPlataforma(montoSugerido: estadoPlataforma!.monto);
-    } else if (elegida.esOtro) {
-      await _reportarPagoPersonalizado();
-    } else {
-      await _reportarPago(elegida.cuota!);
-    }
+    await _abrirFormularioPago(opciones);
   }
 
-  Future<void> _reportarPagoPersonalizado() async {
-    final organizacionId = widget.usuario.organizacionId;
-    if (organizacionId == null) return;
-    final reportado = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => _FormularioPagoPersonalizado(
-        usuario: widget.usuario,
-        organizacionId: organizacionId,
-        service: _service,
-      ),
-    );
-    if (reportado == true) _refrescar();
-  }
+  /// "Reportar pago" tocado directamente desde la tarjeta de una cuota
+  /// interna puntual -- abre el mismo formulario, ya con esa cuota
+  /// elegida (sin menú, porque ya se sabe cuál es).
+  Future<void> _reportarPago(CuotaPropia cuota) => _abrirFormularioPago([_OpcionPago.interna(cuota)]);
+
+  /// Igual que arriba pero para la cuota de plataforma del mes.
+  Future<void> _reportarPagoPlataforma(EstadoCuotaPlataforma estado) =>
+      _abrirFormularioPago([_OpcionPago.plataforma(estado)]);
 
   String _labelMetodo(String? metodo) {
     switch (metodo) {
@@ -367,8 +346,7 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
                                       )
                                     else if (!estadoPlataforma.alDia)
                                       OutlinedButton.icon(
-                                        onPressed: () => _reportarPagoPlataforma(
-                                            montoSugerido: estadoPlataforma!.monto),
+                                        onPressed: () => _reportarPagoPlataforma(estadoPlataforma!),
                                         icon: const Icon(Icons.check_circle_outline),
                                         label: const Text('Reportar pago'),
                                       ),
@@ -532,89 +510,66 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
   }
 }
 
-/// Una opción dentro del selector "¿Qué pago vas a registrar?" -- ya
-/// sea la cuota de plataforma del mes en curso o una cuota interna
-/// pendiente/atrasada puntual.
+/// Una opción dentro del menú desplegable "¿Qué vas a pagar?" -- ya
+/// sea la cuota de plataforma del mes en curso, una cuota interna
+/// pendiente/atrasada puntual, o "Otro pago" (siempre al final).
 class _OpcionPago {
   final String titulo;
-  final String subtitulo;
   final bool esPlataforma;
   final bool esOtro;
   final CuotaPropia? cuota;
+  final double? montoSugerido;
 
   _OpcionPago.plataforma(EstadoCuotaPlataforma estado)
       : titulo = 'Pago a plataforma',
-        subtitulo = '₲ ${NumberFormat.decimalPattern('es').format(estado.monto)} · este mes',
         esPlataforma = true,
         esOtro = false,
-        cuota = null;
+        cuota = null,
+        montoSugerido = estado.monto;
 
   _OpcionPago.interna(CuotaPropia c)
       : titulo = c.motivo,
-        subtitulo = '₲ ${NumberFormat.decimalPattern('es').format(c.montoTotal)} · ${_meses[c.mes]} ${c.anio}',
         esPlataforma = false,
         esOtro = false,
-        cuota = c;
+        cuota = c,
+        montoSugerido = c.montoTotal;
 
   _OpcionPago.otro()
       : titulo = 'Otro pago',
-        subtitulo = 'Elegís vos el motivo y el monto',
         esPlataforma = false,
         esOtro = true,
-        cuota = null;
+        cuota = null,
+        montoSugerido = null;
 }
 
-class _SelectorPagoSheet extends StatelessWidget {
+/// Formulario único para registrar cualquier pago -- misma estructura
+/// que "Subir documento" (un menú desplegable con las opciones reales
+/// y "Otro" al final, todo en una sola pantalla). Pedido de Elias
+/// 2026-08-22 (2ª vuelta): no quería un selector aparte que abriera un
+/// formulario distinto según lo elegido, sino UN menú desplegable con
+/// las opciones (que sí tienen que aparecer -- plataforma, cuotas ya
+/// generadas por el presidente) y el monto siempre editable ahí
+/// mismo, sin que ninguna opción imponga un monto fijo.
+class _FormularioRegistrarPago extends StatefulWidget {
   final List<_OpcionPago> opciones;
-  const _SelectorPagoSheet({required this.opciones});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-            child: Text('¿Qué pago vas a registrar?', style: Theme.of(context).textTheme.titleLarge),
-          ),
-          ...opciones.map((o) => ListTile(
-                leading: Icon(
-                  o.esPlataforma
-                      ? Icons.workspace_premium_outlined
-                      : o.esOtro
-                          ? Icons.add_circle_outline
-                          : Icons.payments_outlined,
-                  color: AppTheme.rojoInstitucional,
-                ),
-                title: Text(o.titulo),
-                subtitle: Text(o.subtitulo),
-                onTap: () => Navigator.of(context).pop(o),
-              )),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-}
-
-class _FormularioReportarPago extends StatefulWidget {
-  final CuotaPropia cuota;
   final Usuario usuario;
   final ConductorService service;
-  const _FormularioReportarPago({
-    required this.cuota,
+  final CuotaPlataformaService servicioPlataforma;
+  const _FormularioRegistrarPago({
+    required this.opciones,
     required this.usuario,
     required this.service,
+    required this.servicioPlataforma,
   });
 
   @override
-  State<_FormularioReportarPago> createState() => _FormularioReportarPagoState();
+  State<_FormularioRegistrarPago> createState() => _FormularioRegistrarPagoState();
 }
 
-class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
+class _FormularioRegistrarPagoState extends State<_FormularioRegistrarPago> {
+  late _OpcionPago _seleccionada;
   late final TextEditingController _montoController;
+  final _motivoLibreController = TextEditingController();
   String _metodo = 'efectivo';
   XFile? _archivo;
   DateTime _fechaPago = DateTime.now();
@@ -624,207 +579,29 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
   @override
   void initState() {
     super.initState();
-    _montoController =
-        TextEditingController(text: NumberFormat.decimalPattern('es').format(widget.cuota.montoTotal));
+    _seleccionada = widget.opciones.first;
+    _montoController = TextEditingController(text: _textoMonto(_seleccionada));
   }
 
   @override
   void dispose() {
     _montoController.dispose();
+    _motivoLibreController.dispose();
     super.dispose();
   }
 
-  Future<void> _elegirArchivo() async {
-    final origen = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Tomar foto'),
-              onTap: () => Navigator.of(context).pop(ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Elegir de la galería'),
-              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (origen == null) return;
-    final archivo =
-        await ImagePicker().pickImage(source: origen, maxWidth: 1600, imageQuality: 85);
-    if (archivo != null) setState(() => _archivo = archivo);
+  String _textoMonto(_OpcionPago opcion) {
+    final monto = opcion.montoSugerido;
+    return monto != null ? NumberFormat.decimalPattern('es').format(monto) : '';
   }
 
-  Future<void> _elegirFechaPago() async {
-    final fecha = await showDatePicker(
-      context: context,
-      initialDate: _fechaPago,
-      firstDate: DateTime(_fechaPago.year - 1),
-      lastDate: DateTime.now(),
-    );
-    if (fecha != null) setState(() => _fechaPago = fecha);
-  }
-
-  Future<void> _subir() async {
-    final organizacionId = widget.usuario.organizacionId;
-    if (organizacionId == null) return;
-    final monto = double.tryParse(_montoController.text.trim().replaceAll('.', '').replaceAll(',', '.'));
-    if (monto == null || monto <= 0) {
-      setState(() => _error = 'Ingresá un monto válido.');
-      return;
-    }
+  void _seleccionar(_OpcionPago? opcion) {
+    if (opcion == null) return;
     setState(() {
-      _subiendo = true;
+      _seleccionada = opcion;
+      _montoController.text = _textoMonto(opcion);
       _error = null;
     });
-    try {
-      final bytes = _archivo != null ? await _archivo!.readAsBytes() : null;
-      final extension = _archivo != null ? _archivo!.name.split('.').last : null;
-      await widget.service.reportarPago(
-        cuotaId: widget.cuota.id,
-        usuarioId: widget.usuario.id,
-        organizacionId: organizacionId,
-        monto: monto,
-        metodoPago: _metodo,
-        fechaPago: _fechaPago,
-        bytes: bytes,
-        extension: extension,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on CuotaException catch (e) {
-      setState(() => _error = e.message);
-    } catch (_) {
-      setState(() => _error = 'No se pudo registrar el pago. Intentá de nuevo.');
-    } finally {
-      if (mounted) setState(() => _subiendo = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final formatoFecha = DateFormat('dd/MM/yyyy');
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Reportar pago', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(
-            '${widget.cuota.motivo} · ${_meses[widget.cuota.mes]} ${widget.cuota.anio}',
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _montoController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Monto (₲)', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 16),
-          Text('Medio de pago', style: Theme.of(context).textTheme.bodyMedium),
-          RadioListTile<String>(
-            contentPadding: EdgeInsets.zero,
-            value: 'efectivo',
-            groupValue: _metodo,
-            title: const Text('Efectivo'),
-            onChanged: (v) => setState(() => _metodo = v!),
-          ),
-          RadioListTile<String>(
-            contentPadding: EdgeInsets.zero,
-            value: 'transferencia',
-            groupValue: _metodo,
-            title: const Text('Transferencia'),
-            onChanged: (v) => setState(() => _metodo = v!),
-          ),
-          if (_metodo == 'transferencia') ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _elegirArchivo,
-              icon: const Icon(Icons.camera_alt_outlined),
-              label: Text(_archivo == null ? 'Elegir foto del comprobante (opcional)' : 'Foto seleccionada ✓'),
-            ),
-          ],
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _elegirFechaPago,
-            icon: const Icon(Icons.event_outlined),
-            label: Text('Fecha de pago: ${formatoFecha.format(_fechaPago)}'),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _subiendo ? null : _subir,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.rojoInstitucional,
-              foregroundColor: Colors.white,
-            ),
-            child: _subiendo
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Confirmar pago'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FormularioReportarPagoPlataforma extends StatefulWidget {
-  final String usuarioId;
-  final String organizacionId;
-  final double montoSugerido;
-  final CuotaPlataformaService service;
-  const _FormularioReportarPagoPlataforma({
-    required this.usuarioId,
-    required this.organizacionId,
-    required this.montoSugerido,
-    required this.service,
-  });
-
-  @override
-  State<_FormularioReportarPagoPlataforma> createState() => _FormularioReportarPagoPlataformaState();
-}
-
-class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPagoPlataforma> {
-  late final TextEditingController _montoController;
-  String _metodo = 'efectivo';
-  XFile? _archivo;
-  DateTime _fechaPago = DateTime.now();
-  bool _subiendo = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _montoController =
-        TextEditingController(text: NumberFormat.decimalPattern('es').format(widget.montoSugerido));
-  }
-
-  @override
-  void dispose() {
-    _montoController.dispose();
-    super.dispose();
   }
 
   Future<void> _elegirArchivo() async {
@@ -864,10 +641,20 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
   }
 
   Future<void> _subir() async {
+    final organizacionId = widget.usuario.organizacionId;
+    if (organizacionId == null) return;
     final monto = double.tryParse(_montoController.text.trim().replaceAll('.', '').replaceAll(',', '.'));
     if (monto == null || monto <= 0) {
       setState(() => _error = 'Ingresá un monto válido.');
       return;
+    }
+    String motivoLibre = '';
+    if (_seleccionada.esOtro) {
+      motivoLibre = _motivoLibreController.text.trim();
+      if (motivoLibre.isEmpty) {
+        setState(() => _error = 'Contá qué estás pagando.');
+        return;
+      }
     }
     setState(() {
       _subiendo = true;
@@ -876,17 +663,43 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
     try {
       final bytes = _archivo != null ? await _archivo!.readAsBytes() : null;
       final extension = _archivo != null ? _archivo!.name.split('.').last : null;
-      await widget.service.reportarPago(
-        usuarioId: widget.usuarioId,
-        organizacionId: widget.organizacionId,
-        monto: monto,
-        metodoPago: _metodo,
-        fechaPago: _fechaPago,
-        bytes: bytes,
-        extension: extension,
-      );
+      if (_seleccionada.esPlataforma) {
+        await widget.servicioPlataforma.reportarPago(
+          usuarioId: widget.usuario.id,
+          organizacionId: organizacionId,
+          monto: monto,
+          metodoPago: _metodo,
+          fechaPago: _fechaPago,
+          bytes: bytes,
+          extension: extension,
+        );
+      } else if (_seleccionada.esOtro) {
+        await widget.service.crearPagoPropio(
+          organizacionId: organizacionId,
+          usuarioId: widget.usuario.id,
+          motivo: motivoLibre,
+          montoBase: monto,
+          metodoPago: _metodo,
+          fechaPago: _fechaPago,
+          bytes: bytes,
+          extension: extension,
+        );
+      } else {
+        await widget.service.reportarPago(
+          cuotaId: _seleccionada.cuota!.id,
+          usuarioId: widget.usuario.id,
+          organizacionId: organizacionId,
+          monto: monto,
+          metodoPago: _metodo,
+          fechaPago: _fechaPago,
+          bytes: bytes,
+          extension: extension,
+        );
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    } on CuotaException catch (e) {
+      setState(() => _error = e.message);
     } on CuotaPlataformaException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
@@ -910,15 +723,34 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Reportar pago', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(
-            'Pago a plataforma',
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
+          Text('Registrar pago', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+          if (widget.opciones.length > 1)
+            DropdownButtonFormField<_OpcionPago>(
+              value: _seleccionada,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '¿Qué vas a pagar?', border: OutlineInputBorder()),
+              items: widget.opciones
+                  .map((o) => DropdownMenuItem(value: o, child: Text(o.titulo, overflow: TextOverflow.ellipsis)))
+                  .toList(),
+              onChanged: _seleccionar,
+            )
+          else
+            Text(
+              'Vas a pagar: ${_seleccionada.titulo}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          if (_seleccionada.esOtro) ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: _motivoLibreController,
+              decoration: const InputDecoration(
+                labelText: 'Descripción del pago',
+                hintText: 'Ej: Multa, evento, aporte extra',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           TextField(
             controller: _montoController,
@@ -979,199 +811,3 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
   }
 }
 
-/// Formulario "Otro pago": motivo y monto libres, aparte de las
-/// opciones predeterminadas (plataforma, cuotas ya generadas). Pedido
-/// de Elias 2026-08-22: siempre tiene que estar la opción de declarar
-/// cualquier pago, no solo elegir entre lo predefinido.
-class _FormularioPagoPersonalizado extends StatefulWidget {
-  final Usuario usuario;
-  final String organizacionId;
-  final ConductorService service;
-  const _FormularioPagoPersonalizado({
-    required this.usuario,
-    required this.organizacionId,
-    required this.service,
-  });
-
-  @override
-  State<_FormularioPagoPersonalizado> createState() => _FormularioPagoPersonalizadoState();
-}
-
-class _FormularioPagoPersonalizadoState extends State<_FormularioPagoPersonalizado> {
-  final _motivoController = TextEditingController();
-  final _montoController = TextEditingController();
-  String _metodo = 'efectivo';
-  XFile? _archivo;
-  DateTime _fechaPago = DateTime.now();
-  bool _subiendo = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _motivoController.dispose();
-    _montoController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _elegirArchivo() async {
-    final origen = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Tomar foto'),
-              onTap: () => Navigator.of(context).pop(ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Elegir de la galería'),
-              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (origen == null) return;
-    final archivo = await ImagePicker().pickImage(source: origen, maxWidth: 1600, imageQuality: 85);
-    if (archivo != null) setState(() => _archivo = archivo);
-  }
-
-  Future<void> _elegirFechaPago() async {
-    final fecha = await showDatePicker(
-      context: context,
-      initialDate: _fechaPago,
-      firstDate: DateTime(_fechaPago.year - 1),
-      lastDate: DateTime.now(),
-    );
-    if (fecha != null) setState(() => _fechaPago = fecha);
-  }
-
-  Future<void> _subir() async {
-    final motivo = _motivoController.text.trim();
-    final monto = double.tryParse(_montoController.text.trim().replaceAll('.', '').replaceAll(',', '.'));
-    if (motivo.isEmpty) {
-      setState(() => _error = 'Contá qué estás pagando.');
-      return;
-    }
-    if (monto == null || monto <= 0) {
-      setState(() => _error = 'Ingresá un monto válido.');
-      return;
-    }
-    setState(() {
-      _subiendo = true;
-      _error = null;
-    });
-    try {
-      final bytes = _archivo != null ? await _archivo!.readAsBytes() : null;
-      final extension = _archivo != null ? _archivo!.name.split('.').last : null;
-      await widget.service.crearPagoPropio(
-        organizacionId: widget.organizacionId,
-        usuarioId: widget.usuario.id,
-        motivo: motivo,
-        montoBase: monto,
-        metodoPago: _metodo,
-        fechaPago: _fechaPago,
-        bytes: bytes,
-        extension: extension,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on CuotaException catch (e) {
-      setState(() => _error = e.message);
-    } catch (_) {
-      setState(() => _error = 'No se pudo registrar el pago. Intentá de nuevo.');
-    } finally {
-      if (mounted) setState(() => _subiendo = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final formatoFecha = DateFormat('dd/MM/yyyy');
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Otro pago', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(
-            'Contanos qué estás pagando y cuánto',
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _motivoController,
-            decoration: const InputDecoration(labelText: 'Motivo del pago', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _montoController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Monto (₲)', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 16),
-          Text('Medio de pago', style: Theme.of(context).textTheme.bodyMedium),
-          RadioListTile<String>(
-            contentPadding: EdgeInsets.zero,
-            value: 'efectivo',
-            groupValue: _metodo,
-            title: const Text('Efectivo'),
-            onChanged: (v) => setState(() => _metodo = v!),
-          ),
-          RadioListTile<String>(
-            contentPadding: EdgeInsets.zero,
-            value: 'transferencia',
-            groupValue: _metodo,
-            title: const Text('Transferencia'),
-            onChanged: (v) => setState(() => _metodo = v!),
-          ),
-          if (_metodo == 'transferencia') ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _elegirArchivo,
-              icon: const Icon(Icons.camera_alt_outlined),
-              label: Text(_archivo == null ? 'Elegir foto del comprobante (opcional)' : 'Foto seleccionada ✓'),
-            ),
-          ],
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _elegirFechaPago,
-            icon: const Icon(Icons.event_outlined),
-            label: Text('Fecha de pago: ${formatoFecha.format(_fechaPago)}'),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _subiendo ? null : _subir,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.rojoInstitucional,
-              foregroundColor: Colors.white,
-            ),
-            child: _subiendo
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Confirmar pago'),
-          ),
-        ],
-      ),
-    );
-  }
-}

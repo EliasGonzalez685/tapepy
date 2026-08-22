@@ -650,6 +650,40 @@ class ParadaDetalleService {
     return resultado;
   }
 
+  /// Documentos de UN conductor puntual (no toda la parada) -- pedido de
+  /// Elias 2026-08-22: tanto el presidente de parada como el de
+  /// asociación necesitan poder abrir rápido los documentos de un
+  /// chofer específico cuando una autoridad se los pide, sin tener que
+  /// buscarlo entre todos los documentos mezclados de la parada. La RLS
+  /// de `documentos_conductor` ya cubre a ambos roles (ver migración
+  /// 0019), así que esto es solo una consulta acotada por conductor.
+  Future<List<DocumentoItem>> cargarDocumentosDeConductor(String conductorId) async {
+    final rows = await _client
+        .from('documentos_conductor')
+        .select('id, tipo, estado, fecha_vencimiento, archivo_url, nombre_archivo, descripcion')
+        .eq('conductor_id', conductorId);
+
+    final resultado = (rows as List).map((row) {
+      final map = row as Map<String, dynamic>;
+      return DocumentoItem(
+        id: map['id'] as String,
+        entidad: '',
+        tipo: map['tipo'] as String,
+        estado: map['estado'] as String,
+        archivoUrl: map['archivo_url'] as String,
+        nombreArchivo: map['nombre_archivo'] as String?,
+        descripcion: map['descripcion'] as String?,
+        fechaVencimiento: map['fecha_vencimiento'] != null
+            ? DateTime.parse(map['fecha_vencimiento'] as String)
+            : null,
+      );
+    }).toList();
+
+    const orden = {'vencido': 0, 'por_vencer': 1, 'vigente': 2};
+    resultado.sort((a, b) => (orden[a.estado] ?? 3).compareTo(orden[b.estado] ?? 3));
+    return resultado;
+  }
+
   /// El bucket "documentos" es privado — hace falta una URL firmada para
   /// poder abrir/imprimir el archivo real de un documento.
   Future<String> obtenerUrlFirmada(String path) async {

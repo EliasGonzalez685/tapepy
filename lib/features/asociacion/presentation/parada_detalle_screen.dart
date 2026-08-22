@@ -6,6 +6,7 @@ import '../../../shared/utils/imprimir_documento.dart';
 import '../../../shared/widgets/badge_en_servicio.dart';
 import '../../../shared/models/user_role.dart';
 import '../../../shared/widgets/icon_badge.dart';
+import '../../../shared/widgets/documentos_conductor_sheet.dart';
 import '../../../shared/widgets/vehiculos_conductor_sheet.dart';
 import '../data/lote_pago_service.dart';
 import '../data/parada_detalle_service.dart';
@@ -613,6 +614,16 @@ class _SeccionConductores extends StatelessWidget {
               const SizedBox(width: 4),
               if (item.telefono != null)
                 Icon(Icons.phone_outlined, color: Theme.of(context).colorScheme.outline, size: 20),
+              IconButton(
+                icon: const Icon(Icons.description_outlined),
+                tooltip: 'Ver documentos',
+                onPressed: () => mostrarDocumentosConductorSheet(
+                  context,
+                  conductorId: item.id,
+                  nombreConductor: item.nombre,
+                  service: service,
+                ),
+              ),
               IconButton(
                 icon: Icon(Icons.person_remove_outlined, color: Theme.of(context).colorScheme.error),
                 tooltip: 'Eliminar conductor',

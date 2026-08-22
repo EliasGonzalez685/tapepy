@@ -20,17 +20,27 @@ class MiVehiculoScreen extends StatefulWidget {
 
 class _MiVehiculoScreenState extends State<MiVehiculoScreen> {
   final _service = ConductorService();
-  late Future<List<VehiculoInfo>> _future;
+  // Ya viene sincrónico desde el perfil (no hace falta pedirlo a la red
+  // para el primer render). `_refrescar()` sí pega contra la base --
+  // se usa después de agregar/editar/eliminar, donde de verdad hace
+  // falta traer datos nuevos.
+  late List<VehiculoInfo> _vehiculos;
+  bool _cargando = false;
 
   @override
   void initState() {
     super.initState();
-    _future = Future.value(widget.perfil.vehiculos);
+    _vehiculos = widget.perfil.vehiculos;
   }
 
   Future<void> _refrescar() async {
+    setState(() => _cargando = true);
     final perfil = await _service.cargarPerfil(widget.perfil.usuarioId);
-    setState(() => _future = Future.value(perfil?.vehiculos ?? []));
+    if (!mounted) return;
+    setState(() {
+      _vehiculos = perfil?.vehiculos ?? [];
+      _cargando = false;
+    });
   }
 
   Future<void> _agregar() async {
@@ -47,16 +57,25 @@ class _MiVehiculoScreenState extends State<MiVehiculoScreen> {
     if (guardado == true) _refrescar();
   }
 
+  /// Cambio optimista: se ve el switch moverse al toque en vez de
+  /// esperar a que vuelva a bajar toda la lista de la red (eso era lo
+  /// que hacía que pareciera "no cambiar" -- en realidad recargaba todo
+  /// con un spinner de pantalla completa y el usuario no llegaba a
+  /// notar la actualización real). Si falla, se revierte solo esa fila
+  /// y se avisa.
   Future<void> _alternarIncluirEnListado(VehiculoInfo vehiculo, bool valor) async {
     if (vehiculo.id == null) return;
+    final index = _vehiculos.indexWhere((v) => v.id == vehiculo.id);
+    if (index == -1) return;
+
+    setState(() => _vehiculos[index] = vehiculo.copyWith(incluirEnListado: valor));
     try {
       await _service.alternarIncluirEnListado(vehiculoId: vehiculo.id!, valor: valor);
     } catch (_) {
       if (!mounted) return;
+      setState(() => _vehiculos[index] = vehiculo.copyWith(incluirEnListado: !valor));
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('No se pudo actualizar. Intentá de nuevo.')));
-    } finally {
-      _refrescar();
     }
   }
 
@@ -109,13 +128,12 @@ class _MiVehiculoScreenState extends State<MiVehiculoScreen> {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Agregar vehículo', style: TextStyle(color: Colors.white)),
       ),
-      body: FutureBuilder<List<VehiculoInfo>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      body: Builder(
+        builder: (context) {
+          if (_cargando) {
             return const Center(child: CircularProgressIndicator());
           }
-          final vehiculos = snapshot.data ?? [];
+          final vehiculos = _vehiculos;
           if (vehiculos.isEmpty) {
             return ListView(
               children: [

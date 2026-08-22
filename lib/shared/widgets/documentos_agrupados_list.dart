@@ -166,6 +166,16 @@ class DocumentosAgrupadosList extends StatelessWidget {
                             child: Text(_labelsEstadoDocumento[item.estado] ?? item.estado,
                                 style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12)),
                           ),
+                          IconButton(
+                            icon: const Icon(Icons.share_outlined),
+                            tooltip: 'Compartir',
+                            onPressed: () => compartirArchivoDocumento(
+                              context: context,
+                              obtenerUrlFirmada: service.obtenerUrlFirmada,
+                              path: item.archivoUrl,
+                              nombreSugerido: item.nombreArchivo ?? '${_labelTipoDocumento(item)}.pdf',
+                            ),
+                          ),
                         ],
                       ),
                     ),

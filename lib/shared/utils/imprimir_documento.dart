@@ -29,14 +29,7 @@ Future<void> imprimirArchivoDocumento({
   );
 
   try {
-    final url = await obtenerUrlFirmada(path);
-    final respuesta = await http.get(Uri.parse(url));
-    if (respuesta.statusCode != 200) {
-      throw Exception('No se pudo descargar el archivo (${respuesta.statusCode})');
-    }
-    final bytes = respuesta.bodyBytes;
-    final pdfBytes = _esPdf(bytes) ? bytes : await _envolverImagenEnPdf(bytes);
-
+    final pdfBytes = await _descargarComoPdf(obtenerUrlFirmada, path);
     if (!context.mounted) return;
     Navigator.of(context, rootNavigator: true).pop();
     await Printing.layoutPdf(onLayout: (_) async => pdfBytes, name: nombreSugerido);
@@ -47,6 +40,51 @@ Future<void> imprimirArchivoDocumento({
       const SnackBar(content: Text('No se pudo abrir el documento. Intentá de nuevo.')),
     );
   }
+}
+
+/// Abre el selector nativo para compartir el documento (WhatsApp,
+/// correo, etc.) en vez del diálogo de imprimir/guardar -- pedido de
+/// Elias 2026-08-22: hoy la única forma de sacar un documento de la app
+/// era descargarlo, y quiere poder mandarlo directo. Usa la misma
+/// resolución PDF que [imprimirArchivoDocumento] (URL firmada + armado
+/// de PDF si es una foto), solo cambia qué hace con el resultado.
+Future<void> compartirArchivoDocumento({
+  required BuildContext context,
+  required Future<String> Function(String path) obtenerUrlFirmada,
+  required String path,
+  required String nombreSugerido,
+}) async {
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+
+  try {
+    final pdfBytes = await _descargarComoPdf(obtenerUrlFirmada, path);
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    await Printing.sharePdf(bytes: pdfBytes, filename: nombreSugerido);
+  } catch (_) {
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No se pudo compartir el documento. Intentá de nuevo.')),
+    );
+  }
+}
+
+Future<Uint8List> _descargarComoPdf(
+  Future<String> Function(String path) obtenerUrlFirmada,
+  String path,
+) async {
+  final url = await obtenerUrlFirmada(path);
+  final respuesta = await http.get(Uri.parse(url));
+  if (respuesta.statusCode != 200) {
+    throw Exception('No se pudo descargar el archivo (${respuesta.statusCode})');
+  }
+  final bytes = respuesta.bodyBytes;
+  return _esPdf(bytes) ? bytes : await _envolverImagenEnPdf(bytes);
 }
 
 bool _esPdf(Uint8List bytes) {

@@ -76,6 +76,16 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
     );
   }
 
+  Future<void> _compartirDocumento(DocumentoConductorItem doc) async {
+    final etiquetaTipo = _tiposDocumento[doc.tipo]?.$1 ?? doc.tipo;
+    await compartirArchivoDocumento(
+      context: context,
+      obtenerUrlFirmada: _service.obtenerUrlFirmada,
+      path: doc.archivoUrl,
+      nombreSugerido: '$etiquetaTipo.pdf',
+    );
+  }
+
   Future<void> _eliminarDocumento(DocumentoConductorItem doc) async {
     final etiquetaTipo = _tiposDocumento[doc.tipo]?.$1 ?? doc.tipo;
     final confirmar = await showDialog<bool>(
@@ -225,7 +235,12 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
                               label: const Text('Ver'),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.share_outlined),
+                            tooltip: 'Compartir',
+                            onPressed: () => _compartirDocumento(doc),
+                          ),
                           IconButton(
                             icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
                             tooltip: 'Eliminar',

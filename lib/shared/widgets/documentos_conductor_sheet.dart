@@ -168,6 +168,16 @@ class _DocumentosConductorSheetState extends State<DocumentosConductorSheet> {
                                   style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
                                 ),
                               ),
+                              IconButton(
+                                icon: const Icon(Icons.share_outlined),
+                                tooltip: 'Compartir',
+                                onPressed: () => compartirArchivoDocumento(
+                                  context: context,
+                                  obtenerUrlFirmada: widget.service.obtenerUrlFirmada,
+                                  path: item.archivoUrl,
+                                  nombreSugerido: item.nombreArchivo ?? '${_labelTipo(item)}.pdf',
+                                ),
+                              ),
                             ],
                           ),
                         ),

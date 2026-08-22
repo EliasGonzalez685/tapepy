@@ -17,6 +17,7 @@ import '../data/asociacion_dashboard_service.dart';
 import '../data/parada_detalle_service.dart';
 import '../data/parada_resumen.dart';
 import 'convenios_organizacion_screen.dart';
+import 'estado_plataforma_organizacion_screen.dart';
 import 'imprimir_listado_screen.dart';
 import 'miembros_activos_screen.dart';
 import 'parada_detalle_screen.dart';
@@ -316,6 +317,27 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
               );
             },
           ),
+          // Solo el presidente de asociación real (no cuando el dueño de
+          // plataforma reusa esta pantalla para supervisar) -- pedido
+          // explícito de Elias: como mínimo tiene que ver el estado de
+          // pago a la plataforma de cada parada. Gestionar el cobro en
+          // sí queda exclusivo del dueño (ítem propio en su panel).
+          if (widget.usuario?.rol == UserRole.presidenteAsociacion)
+            ItemMenuLateral(
+              icono: Icons.workspace_premium_outlined,
+              titulo: 'Estado de pagos a la plataforma',
+              onTap: () {
+                final organizacionId = widget.usuario?.organizacionId;
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                if (organizacionId == null) return;
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (_) => EstadoPlataformaOrganizacionScreen(organizacionId: organizacionId),
+                  ),
+                );
+              },
+            ),
           ...widget.itemsExtraAdicionales,
         ],
       ),

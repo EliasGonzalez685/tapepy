@@ -255,16 +255,12 @@ class _ParadaDetalleScreenState extends State<ParadaDetalleScreen> {
   }
 
   void _abrirBalancePagos() {
-    final organizacionId = widget.usuario?.organizacionId;
-    if (organizacionId == null) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => BalancePagosScreen(
           paradaId: widget.parada.id,
           paradaNombre: widget.parada.nombre,
-          organizacionId: organizacionId,
           service: _service,
-          mostrarCuotaPlataforma: true,
         ),
       ),
     );

@@ -405,7 +405,6 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
         builder: (_) => BalancePagosScreen(
           paradaId: parada.id,
           paradaNombre: parada.nombre,
-          organizacionId: parada.organizacionId,
           service: _detalleService,
         ),
       ),

@@ -3,10 +3,13 @@ import '../../core/theme/app_theme.dart';
 import '../../features/asociacion/data/parada_detalle_service.dart';
 import '../../features/conductor/data/conductor_service.dart' show VehiculoInfo;
 
-/// Atajo para abrir el selector de vehículos de un conductor desde
+/// Atajo para abrir el detalle de vehículos de un conductor desde
 /// cualquier pantalla que ya tenga un [ParadaDetalleService] a mano
-/// (presidente de asociación o de parada — ambos pueden alternar cuáles
-/// vehículos entran en los próximos listados impresos).
+/// (presidente de asociación o de parada) — pueden ver marca, modelo,
+/// año, color, chapa y las fotos (pedido de Elias 2026-08-22: quiere
+/// ver qué vehículo maneja cada conductor DENTRO de la app, aparte del
+/// listado imprimible que ya existía) y también alternar cuáles
+/// vehículos entran en los próximos listados impresos.
 void mostrarVehiculosConductorSheet(
   BuildContext context, {
   required String conductorId,
@@ -26,10 +29,10 @@ void mostrarVehiculosConductorSheet(
 }
 
 /// Vehículos de un conductor puntual: el presidente (de parada o de
-/// asociación) puede ver el detalle y alternar cuáles entran en los
-/// próximos listados impresos — no puede editar marca, modelo, chapa
-/// ni nada más de eso, solo ese switch (la RLS lo blinda del lado del
-/// servidor también, ver migración 0029).
+/// asociación) puede ver el detalle completo y las fotos, y alternar
+/// cuáles vehículos entran en los próximos listados impresos — no puede
+/// editar marca, modelo, chapa ni nada más de eso, solo ese switch (la
+/// RLS lo blinda del lado del servidor también, ver migración 0029).
 class VehiculosConductorSheet extends StatefulWidget {
   final String conductorId;
   final String nombreConductor;
@@ -71,6 +74,79 @@ class _VehiculosConductorSheetState extends State<VehiculosConductorSheet> {
     }
   }
 
+  void _verFoto(String path) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: FutureBuilder<String>(
+          future: widget.service.obtenerUrlFirmada(path),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator(color: Colors.white)),
+              );
+            }
+            return InteractiveViewer(
+              child: Image.network(
+                snapshot.data!,
+                errorBuilder: (_, __, ___) => const SizedBox(
+                  height: 200,
+                  child: Center(
+                    child: Text('No se pudo cargar la foto', style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _miniatura(String? path, String etiqueta) {
+    if (path == null) {
+      return Container(
+        width: 90,
+        height: 90,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        alignment: Alignment.center,
+        child: Text('Sin foto\n$etiqueta',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+      );
+    }
+    return GestureDetector(
+      onTap: () => _verFoto(path),
+      child: Container(
+        width: 90,
+        height: 90,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.rojoInstitucional.withValues(alpha: 0.3)),
+        ),
+        child: FutureBuilder<String>(
+          future: widget.service.obtenerUrlFirmada(path),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+            }
+            return Image.network(
+              snapshot.data!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image_outlined)),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -87,47 +163,97 @@ class _VehiculosConductorSheetState extends State<VehiculosConductorSheet> {
           Text('Vehículos de ${widget.nombreConductor}', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
           Text(
-            'Elegí cuáles entran en los próximos listados impresos.',
+            'Solo para ver -- el switch elige cuáles entran en los próximos listados impresos.',
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
                 ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
-          FutureBuilder<List<VehiculoInfo>>(
-            future: _future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final vehiculos = snapshot.data ?? [];
-              if (vehiculos.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Text('Todavía no cargó ningún vehículo.',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                );
-              }
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: vehiculos.map((vehiculo) {
-                  final titulo = [vehiculo.marca, vehiculo.modelo]
-                      .where((e) => e != null && e.isNotEmpty)
-                      .join(' ');
-                  return SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    activeThumbColor: AppTheme.rojoInstitucional,
-                    title: Text(titulo.isEmpty ? (vehiculo.chapa ?? 'Vehículo') : titulo),
-                    subtitle: vehiculo.chapa != null ? Text(vehiculo.chapa!) : null,
-                    value: vehiculo.incluirEnListado,
-                    onChanged: (valor) => _alternar(vehiculo, valor),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
+            child: FutureBuilder<List<VehiculoInfo>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: CircularProgressIndicator()),
                   );
-                }).toList(),
-              );
-            },
+                }
+                final vehiculos = snapshot.data ?? [];
+                if (vehiculos.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Text('Todavía no cargó ningún vehículo.',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  );
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: vehiculos.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final vehiculo = vehiculos[index];
+                    final titulo = [vehiculo.marca, vehiculo.modelo]
+                        .where((e) => e != null && e.isNotEmpty)
+                        .join(' ');
+                    final detalle = [
+                      if (vehiculo.anio != null) '${vehiculo.anio}',
+                      if (vehiculo.color != null && vehiculo.color!.isNotEmpty) vehiculo.color!,
+                    ].join(' · ');
+                    return Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(titulo.isEmpty ? (vehiculo.chapa ?? 'Vehículo') : titulo,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600)),
+                            if (vehiculo.chapa != null) ...[
+                              const SizedBox(height: 2),
+                              Text('Chapa: ${vehiculo.chapa}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                            ],
+                            if (detalle.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(detalle,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                            ],
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                _miniatura(vehiculo.fotoFrenteChapa, 'Frente'),
+                                const SizedBox(width: 10),
+                                _miniatura(vehiculo.fotoLejos, 'De lejos'),
+                              ],
+                            ),
+                            const Divider(height: 24),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              activeThumbColor: AppTheme.rojoInstitucional,
+                              title: const Text('Incluir en próximos listados impresos'),
+                              value: vehiculo.incluirEnListado,
+                              onChanged: (valor) => _alternar(vehiculo, valor),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),

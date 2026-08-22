@@ -74,6 +74,91 @@ Future<void> compartirArchivoDocumento({
   }
 }
 
+/// Abre el diálogo nativo de imprimir/guardar para un PDF que ya está
+/// armado en memoria (no hay que resolver ninguna URL) -- se usa para
+/// el resultado de [combinarDocumentosEnUnaHoja].
+Future<void> imprimirBytesPdf({
+  required BuildContext context,
+  required Uint8List bytes,
+  required String nombreSugerido,
+}) async {
+  try {
+    await Printing.layoutPdf(onLayout: (_) async => bytes, name: nombreSugerido);
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No se pudo abrir el documento. Intentá de nuevo.')),
+    );
+  }
+}
+
+/// Igual que [compartirArchivoDocumento] pero para un PDF que ya está
+/// armado en memoria.
+Future<void> compartirBytesPdf({
+  required BuildContext context,
+  required Uint8List bytes,
+  required String nombreSugerido,
+}) async {
+  try {
+    await Printing.sharePdf(bytes: bytes, filename: nombreSugerido);
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No se pudo compartir el documento. Intentá de nuevo.')),
+    );
+  }
+}
+
+/// Junta hasta 4 documentos ya subidos (cada uno ya es su propio PDF)
+/// en UNA sola hoja nueva, en grilla -- pedido de Elias 2026-08-22: hay
+/// documentos que conviene tener juntos al imprimir (cédula + cédula
+/// verde + habilitación, por ejemplo). No reemplaza nada: cada
+/// documento sigue existiendo tal cual estaba, esto arma una copia
+/// extra combinada para ver/imprimir/compartir.
+///
+/// Rasteriza la primera página de cada PDF de origen a imagen (con
+/// [Printing.raster]) para poder acomodarla en la grilla -- si algún
+/// documento tiene más de una página (frente/verso combinados al
+/// subir), solo entra la primera.
+Future<Uint8List> combinarDocumentosEnUnaHoja(List<Uint8List> pdfsBytes) async {
+  final imagenes = <pw.MemoryImage>[];
+  for (final bytes in pdfsBytes) {
+    await for (final pagina in Printing.raster(bytes, pages: [0], dpi: 150)) {
+      final png = await pagina.toPng();
+      imagenes.add(pw.MemoryImage(png));
+      break;
+    }
+  }
+
+  final filas = <pw.Widget>[];
+  for (var i = 0; i < imagenes.length; i += 2) {
+    final enFila = imagenes.sublist(i, i + 2 > imagenes.length ? imagenes.length : i + 2);
+    filas.add(
+      pw.Expanded(
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            for (final img in enFila)
+              pw.Expanded(
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Image(img, fit: pw.BoxFit.contain),
+                ),
+              ),
+            if (enFila.length == 1) pw.Expanded(child: pw.Container()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  final doc = pw.Document();
+  doc.addPage(
+    pw.Page(build: (context) => pw.Column(children: filas)),
+  );
+  return doc.save();
+}
+
 Future<Uint8List> _descargarComoPdf(
   Future<String> Function(String path) obtenerUrlFirmada,
   String path,

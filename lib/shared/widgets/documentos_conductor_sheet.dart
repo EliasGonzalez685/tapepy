@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/asociacion/data/parada_detalle_service.dart';
 import '../utils/imprimir_documento.dart';
+import 'combinar_documentos_sheet.dart';
 import 'icon_badge.dart';
 
 /// Atajo para abrir los documentos de un conductor puntual desde
@@ -85,6 +86,24 @@ class _DocumentosConductorSheetState extends State<DocumentosConductorSheet> {
           ? item.descripcion!
           : (_labelsTipo[item.tipo] ?? item.tipo);
 
+  Future<void> _abrirCombinar() async {
+    final docs = await _future;
+    if (!mounted) return;
+    if (docs.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Necesita al menos 2 documentos subidos para juntar.')),
+      );
+      return;
+    }
+    mostrarCombinarDocumentosSheet(
+      context,
+      documentos: docs
+          .map((d) => (id: d.id, etiqueta: _labelTipo(d), archivoUrl: d.archivoUrl))
+          .toList(),
+      obtenerUrlFirmada: widget.service.obtenerUrlFirmada,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -98,7 +117,19 @@ class _DocumentosConductorSheetState extends State<DocumentosConductorSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Documentos de ${widget.nombreConductor}', style: Theme.of(context).textTheme.titleLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Documentos de ${widget.nombreConductor}',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              IconButton(
+                icon: const Icon(Icons.grid_view_outlined),
+                tooltip: 'Juntar documentos en una hoja',
+                onPressed: _abrirCombinar,
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             'Tocá un documento para verlo, guardarlo o imprimirlo.',

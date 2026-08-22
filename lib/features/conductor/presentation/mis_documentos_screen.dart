@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/imprimir_documento.dart';
 import '../../../shared/utils/seleccionar_foto.dart';
+import '../../../shared/widgets/combinar_documentos_sheet.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../data/conductor_service.dart';
 
@@ -86,6 +87,30 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
     );
   }
 
+  Future<void> _abrirCombinar() async {
+    final docs = await _future;
+    if (!mounted) return;
+    if (docs.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Necesitás al menos 2 documentos subidos para juntar.')),
+      );
+      return;
+    }
+    mostrarCombinarDocumentosSheet(
+      context,
+      documentos: docs
+          .map((d) => (
+                id: d.id,
+                etiqueta: (d.descripcion != null && d.descripcion!.isNotEmpty)
+                    ? d.descripcion!
+                    : (_tiposDocumento[d.tipo]?.$1 ?? d.tipo),
+                archivoUrl: d.archivoUrl,
+              ))
+          .toList(),
+      obtenerUrlFirmada: _service.obtenerUrlFirmada,
+    );
+  }
+
   Future<void> _eliminarDocumento(DocumentoConductorItem doc) async {
     final etiquetaTipo = _tiposDocumento[doc.tipo]?.$1 ?? doc.tipo;
     final confirmar = await showDialog<bool>(
@@ -137,7 +162,16 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
   Widget build(BuildContext context) {
     final formatoFecha = DateFormat('dd/MM/yyyy');
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis documentos')),
+      appBar: AppBar(
+        title: const Text('Mis documentos'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.grid_view_outlined),
+            tooltip: 'Juntar documentos en una hoja',
+            onPressed: _abrirCombinar,
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _abrirFormularioSubida,
         backgroundColor: AppTheme.rojoInstitucional,

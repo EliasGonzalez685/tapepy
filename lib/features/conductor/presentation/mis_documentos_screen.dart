@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/imprimir_documento.dart';
+import '../../../shared/utils/seleccionar_foto.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../data/conductor_service.dart';
 
@@ -276,29 +277,7 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
   }
 
   Future<void> _agregarFoto() async {
-    final origen = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Tomar foto'),
-              onTap: () => Navigator.of(context).pop(ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Elegir de la galería'),
-              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (origen == null) return;
-    final archivo =
-        await ImagePicker().pickImage(source: origen, maxWidth: 1600, imageQuality: 85);
+    final archivo = await seleccionarYRecortarFoto(context);
     if (archivo != null) setState(() => _archivos.add(archivo));
   }
 

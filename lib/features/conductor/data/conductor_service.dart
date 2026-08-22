@@ -466,17 +466,17 @@ class ConductorService {
     Uint8List? bytes,
     String? extension,
   }) async {
-    if (metodoPago == 'transferencia' && (bytes == null || extension == null)) {
-      throw CuotaException('Adjuntá el comprobante de la transferencia.');
-    }
+    // El comprobante es opcional aunque el medio sea transferencia --
+    // pedido de Elias 2026-08-22: la opción de subirlo tiene que estar,
+    // pero no bloquear el reporte del pago si no lo tiene a mano.
     try {
       String? path;
-      if (metodoPago == 'transferencia') {
+      if (metodoPago == 'transferencia' && bytes != null && extension != null) {
         path = '$organizacionId/$usuarioId/$cuotaId.$extension';
         await _client.storage.from('comprobantes').uploadBinary(
               path,
-              bytes!,
-              fileOptions: FileOptions(upsert: true, contentType: _contentType(extension!)),
+              bytes,
+              fileOptions: FileOptions(upsert: true, contentType: _contentType(extension)),
             );
       }
       await _client.from('cuotas_mensuales').update({
@@ -494,6 +494,55 @@ class ConductorService {
 
   Future<String> obtenerUrlComprobante(String path) {
     return _client.storage.from('comprobantes').createSignedUrl(path, 3600);
+  }
+
+  /// Pago "personalizado": el propio socio (conductor, presidente de
+  /// parada o de asociación) declara un pago con motivo y monto
+  /// libres -- no viene de un cargo generado por el presidente. INSERT
+  /// directo; del lado de la base, el trigger
+  /// cuotas_forzar_autoservicio_insert fuerza parada/mes/año/estado
+  /// cuando quien inserta no es "gestionable" sobre sí mismo (un
+  /// conductor raso) -- para los presidentes no cambia nada, ya podían
+  /// hacer esto. Pedido de Elias 2026-08-22.
+  Future<void> crearPagoPropio({
+    required String organizacionId,
+    required String usuarioId,
+    required String motivo,
+    required double montoBase,
+    required String metodoPago, // 'efectivo' | 'transferencia'
+    required DateTime fechaPago,
+    Uint8List? bytes,
+    String? extension,
+  }) async {
+    try {
+      String? path;
+      if (metodoPago == 'transferencia' && bytes != null && extension != null) {
+        final sello = DateTime.now().millisecondsSinceEpoch;
+        path = '$organizacionId/$usuarioId/personalizado_$sello.$extension';
+        await _client.storage.from('comprobantes').uploadBinary(
+              path,
+              bytes,
+              fileOptions: FileOptions(upsert: true, contentType: _contentType(extension)),
+            );
+      }
+      await _client.from('cuotas_mensuales').insert({
+        'organizacion_id': organizacionId,
+        'usuario_id': usuarioId,
+        'motivo': motivo,
+        'monto_base': montoBase,
+        'monto_total': montoBase,
+        'metodo_pago': metodoPago,
+        'fecha_pago': _formatoFecha(fechaPago),
+        if (path != null) 'comprobante_url': path,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        throw CuotaException('Ya reportaste un pago con ese motivo este mes.');
+      }
+      throw CuotaException(e.message);
+    } catch (_) {
+      throw CuotaException('No se pudo registrar el pago. Intentá de nuevo.');
+    }
   }
 
   String _estadoSegunVencimiento(DateTime? vencimiento) {

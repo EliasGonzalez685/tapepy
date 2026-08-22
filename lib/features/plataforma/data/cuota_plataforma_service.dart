@@ -216,18 +216,18 @@ class CuotaPlataformaService {
     Uint8List? bytes,
     String? extension,
   }) async {
-    if (metodoPago == 'transferencia' && (bytes == null || extension == null)) {
-      throw CuotaPlataformaException('Adjuntá el comprobante de la transferencia.');
-    }
+    // El comprobante es opcional aunque sea transferencia -- la opción
+    // de subirlo tiene que estar, pero no es obligatoria (pedido de
+    // Elias 2026-08-22).
     try {
       String? path;
-      if (metodoPago == 'transferencia') {
+      if (metodoPago == 'transferencia' && bytes != null && extension != null) {
         final sello = DateTime.now().millisecondsSinceEpoch;
         path = '$organizacionId/$usuarioId/plataforma_$sello.$extension';
         await _client.storage.from(_bucket).uploadBinary(
               path,
-              bytes!,
-              fileOptions: FileOptions(upsert: true, contentType: _contentType(extension!)),
+              bytes,
+              fileOptions: FileOptions(upsert: true, contentType: _contentType(extension)),
             );
       }
       await _client.from('cuotas_plataforma').insert({

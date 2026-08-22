@@ -87,9 +87,11 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
     if (reportado == true) _refrescar();
   }
 
-  /// El botón único: junta lo que falta pagar (plataforma, si no está
-  /// al día este mes, + cada cuota interna pendiente/atrasada) y deja
-  /// elegir cuál se está reportando.
+  /// El botón único: junta lo que falta pagar (plataforma -- siempre
+  /// aparece como opción mientras no esté al día, es obligatoria -- +
+  /// cada cuota interna pendiente/atrasada) y además deja elegir "Otro
+  /// pago" para declarar algo con motivo y monto libres. Elegís una
+  /// opción y ahí sigue el formulario de siempre.
   Future<void> _elegirQuePagar() async {
     List<CuotaPropia> pendientesInternas = [];
     try {
@@ -109,14 +111,8 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
     final opciones = <_OpcionPago>[
       if (estadoPlataforma != null && !estadoPlataforma.alDia) _OpcionPago.plataforma(estadoPlataforma),
       ...pendientesInternas.map(_OpcionPago.interna),
+      _OpcionPago.otro(),
     ];
-
-    if (opciones.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Estás al día con todos tus pagos.')),
-      );
-      return;
-    }
 
     final elegida = await showModalBottomSheet<_OpcionPago>(
       context: context,
@@ -126,9 +122,27 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
     if (elegida == null) return;
     if (elegida.esPlataforma) {
       await _reportarPagoPlataforma();
+    } else if (elegida.esOtro) {
+      await _reportarPagoPersonalizado();
     } else {
       await _reportarPago(elegida.cuota!);
     }
+  }
+
+  Future<void> _reportarPagoPersonalizado() async {
+    final organizacionId = widget.usuario.organizacionId;
+    if (organizacionId == null) return;
+    final reportado = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => _FormularioPagoPersonalizado(
+        usuario: widget.usuario,
+        organizacionId: organizacionId,
+        service: _service,
+      ),
+    );
+    if (reportado == true) _refrescar();
   }
 
   String _labelMetodo(String? metodo) {
@@ -198,6 +212,7 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _elegirQuePagar,
         backgroundColor: AppTheme.rojoInstitucional,
+        foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Registrar pago'),
       ),
@@ -221,9 +236,18 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
                 return FutureBuilder<List<CuotaPlataformaItem>>(
                   future: _historialPlataformaFuture,
                   builder: (context, snapshotHistorialPlataforma) {
-                    final historialPlataforma = snapshotHistorialPlataforma.data ?? [];
-                    final hayContenidoPlataforma =
-                        (estadoPlataforma?.enDeuda ?? false) || historialPlataforma.isNotEmpty;
+                    final hoy = DateTime.now();
+                    // El historial no repite el mes en curso -- ese ya
+                    // se muestra en la tarjeta "Este mes" de más abajo,
+                    // siempre visible mientras no esté pagado (pedido
+                    // de Elias 2026-08-22: la cuota de plataforma es
+                    // obligatoria y tiene que quedar ahí como pendiente
+                    // hasta que se pague, no escondida atrás del botón).
+                    final historialPlataforma = (snapshotHistorialPlataforma.data ?? [])
+                        .where((c) => !(c.mes == hoy.month && c.anio == hoy.year))
+                        .toList();
+                    final tienePlataforma = estadoPlataforma != null;
+                    final hayContenidoPlataforma = tienePlataforma || historialPlataforma.isNotEmpty;
 
                     if (cuotas.isEmpty && !hayContenidoPlataforma) {
                       return ListView(
@@ -272,9 +296,86 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
                             ),
                             const SizedBox(height: 12),
                           ],
+                          Text('Cuota de plataforma', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          if (estadoPlataforma != null)
+                            Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        IconBadge(
+                                            icono: Icons.workspace_premium_outlined,
+                                            color: _colorEstado(estadoPlataforma.estado),
+                                            diametro: 44),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('Este mes',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(fontWeight: FontWeight.w600)),
+                                              Text('₲ ${formatoMonto.format(estadoPlataforma.monto)}',
+                                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                      fontWeight: FontWeight.w600)),
+                                              if (estadoPlataforma.alDia && estadoPlataforma.metodoPago != null)
+                                                Text('Pagado por: ${_labelMetodo(estadoPlataforma.metodoPago)}',
+                                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: _colorEstado(estadoPlataforma.estado).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text(_labelEstado(estadoPlataforma.estado),
+                                              style: TextStyle(
+                                                  color: _colorEstado(estadoPlataforma.estado),
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 12)),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    if (estadoPlataforma.comprobanteUrl != null)
+                                      OutlinedButton.icon(
+                                        onPressed: () => _verComprobantePlataforma(CuotaPlataformaItem(
+                                          id: estadoPlataforma.cuotaId ?? '',
+                                          usuarioId: estadoPlataforma.usuarioId,
+                                          organizacionId: widget.usuario.organizacionId ?? '',
+                                          mes: hoy.month,
+                                          anio: hoy.year,
+                                          monto: estadoPlataforma.monto,
+                                          estado: estadoPlataforma.estado,
+                                          motivo: 'Cuota de plataforma',
+                                          comprobanteUrl: estadoPlataforma.comprobanteUrl,
+                                        )),
+                                        icon: const Icon(Icons.receipt_long_outlined),
+                                        label: const Text('Ver comprobante'),
+                                      )
+                                    else if (!estadoPlataforma.alDia)
+                                      OutlinedButton.icon(
+                                        onPressed: _reportarPagoPlataforma,
+                                        icon: const Icon(Icons.check_circle_outline),
+                                        label: const Text('Reportar pago'),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           if (historialPlataforma.isNotEmpty) ...[
-                            Text('Cuota de plataforma', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 4),
                             ...historialPlataforma.map((c) {
                               final color = _colorEstado(c.estado);
                               return Card(
@@ -436,19 +537,29 @@ class _OpcionPago {
   final String titulo;
   final String subtitulo;
   final bool esPlataforma;
+  final bool esOtro;
   final CuotaPropia? cuota;
 
   _OpcionPago.plataforma(EstadoCuotaPlataforma estado)
       : titulo = 'Pago a plataforma',
         subtitulo = '₲ ${NumberFormat.decimalPattern('es').format(estado.monto)} · este mes',
         esPlataforma = true,
+        esOtro = false,
         cuota = null;
 
   _OpcionPago.interna(CuotaPropia c)
       : titulo = c.motivo,
         subtitulo = '₲ ${NumberFormat.decimalPattern('es').format(c.montoTotal)} · ${_meses[c.mes]} ${c.anio}',
         esPlataforma = false,
+        esOtro = false,
         cuota = c;
+
+  _OpcionPago.otro()
+      : titulo = 'Otro pago',
+        subtitulo = 'Elegís vos el motivo y el monto',
+        esPlataforma = false,
+        esOtro = true,
+        cuota = null;
 }
 
 class _SelectorPagoSheet extends StatelessWidget {
@@ -468,7 +579,11 @@ class _SelectorPagoSheet extends StatelessWidget {
           ),
           ...opciones.map((o) => ListTile(
                 leading: Icon(
-                  o.esPlataforma ? Icons.workspace_premium_outlined : Icons.payments_outlined,
+                  o.esPlataforma
+                      ? Icons.workspace_premium_outlined
+                      : o.esOtro
+                          ? Icons.add_circle_outline
+                          : Icons.payments_outlined,
                   color: AppTheme.rojoInstitucional,
                 ),
                 title: Text(o.titulo),
@@ -541,10 +656,6 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
   }
 
   Future<void> _subir() async {
-    if (_metodo == 'transferencia' && _archivo == null) {
-      setState(() => _error = 'Elegí una foto del comprobante');
-      return;
-    }
     final organizacionId = widget.usuario.organizacionId;
     if (organizacionId == null) return;
     setState(() {
@@ -552,8 +663,8 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
       _error = null;
     });
     try {
-      final bytes = _metodo == 'transferencia' ? await _archivo!.readAsBytes() : null;
-      final extension = _metodo == 'transferencia' ? _archivo!.name.split('.').last : null;
+      final bytes = _archivo != null ? await _archivo!.readAsBytes() : null;
+      final extension = _archivo != null ? _archivo!.name.split('.').last : null;
       await widget.service.reportarPago(
         cuotaId: widget.cuota.id,
         usuarioId: widget.usuario.id,
@@ -618,7 +729,7 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
             OutlinedButton.icon(
               onPressed: _elegirArchivo,
               icon: const Icon(Icons.camera_alt_outlined),
-              label: Text(_archivo == null ? 'Elegir foto del comprobante' : 'Foto seleccionada ✓'),
+              label: Text(_archivo == null ? 'Elegir foto del comprobante (opcional)' : 'Foto seleccionada ✓'),
             ),
           ],
           const SizedBox(height: 12),
@@ -634,7 +745,10 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _subiendo ? null : _subir,
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.rojoInstitucional,
+              foregroundColor: Colors.white,
+            ),
             child: _subiendo
                 ? const SizedBox(
                     height: 20,
@@ -706,17 +820,13 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
   }
 
   Future<void> _subir() async {
-    if (_metodo == 'transferencia' && _archivo == null) {
-      setState(() => _error = 'Elegí una foto del comprobante');
-      return;
-    }
     setState(() {
       _subiendo = true;
       _error = null;
     });
     try {
-      final bytes = _metodo == 'transferencia' ? await _archivo!.readAsBytes() : null;
-      final extension = _metodo == 'transferencia' ? _archivo!.name.split('.').last : null;
+      final bytes = _archivo != null ? await _archivo!.readAsBytes() : null;
+      final extension = _archivo != null ? _archivo!.name.split('.').last : null;
       await widget.service.reportarPago(
         usuarioId: widget.usuarioId,
         organizacionId: widget.organizacionId,
@@ -780,7 +890,7 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
             OutlinedButton.icon(
               onPressed: _elegirArchivo,
               icon: const Icon(Icons.camera_alt_outlined),
-              label: Text(_archivo == null ? 'Elegir foto del comprobante' : 'Foto seleccionada ✓'),
+              label: Text(_archivo == null ? 'Elegir foto del comprobante (opcional)' : 'Foto seleccionada ✓'),
             ),
           ],
           const SizedBox(height: 12),
@@ -796,7 +906,207 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _subiendo ? null : _subir,
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.rojoInstitucional,
+              foregroundColor: Colors.white,
+            ),
+            child: _subiendo
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Confirmar pago'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Formulario "Otro pago": motivo y monto libres, aparte de las
+/// opciones predeterminadas (plataforma, cuotas ya generadas). Pedido
+/// de Elias 2026-08-22: siempre tiene que estar la opción de declarar
+/// cualquier pago, no solo elegir entre lo predefinido.
+class _FormularioPagoPersonalizado extends StatefulWidget {
+  final Usuario usuario;
+  final String organizacionId;
+  final ConductorService service;
+  const _FormularioPagoPersonalizado({
+    required this.usuario,
+    required this.organizacionId,
+    required this.service,
+  });
+
+  @override
+  State<_FormularioPagoPersonalizado> createState() => _FormularioPagoPersonalizadoState();
+}
+
+class _FormularioPagoPersonalizadoState extends State<_FormularioPagoPersonalizado> {
+  final _motivoController = TextEditingController();
+  final _montoController = TextEditingController();
+  String _metodo = 'efectivo';
+  XFile? _archivo;
+  DateTime _fechaPago = DateTime.now();
+  bool _subiendo = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _motivoController.dispose();
+    _montoController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _elegirArchivo() async {
+    final origen = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Tomar foto'),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Elegir de la galería'),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (origen == null) return;
+    final archivo = await ImagePicker().pickImage(source: origen, maxWidth: 1600, imageQuality: 85);
+    if (archivo != null) setState(() => _archivo = archivo);
+  }
+
+  Future<void> _elegirFechaPago() async {
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: _fechaPago,
+      firstDate: DateTime(_fechaPago.year - 1),
+      lastDate: DateTime.now(),
+    );
+    if (fecha != null) setState(() => _fechaPago = fecha);
+  }
+
+  Future<void> _subir() async {
+    final motivo = _motivoController.text.trim();
+    final monto = double.tryParse(_montoController.text.trim().replaceAll('.', '').replaceAll(',', '.'));
+    if (motivo.isEmpty) {
+      setState(() => _error = 'Contá qué estás pagando.');
+      return;
+    }
+    if (monto == null || monto <= 0) {
+      setState(() => _error = 'Ingresá un monto válido.');
+      return;
+    }
+    setState(() {
+      _subiendo = true;
+      _error = null;
+    });
+    try {
+      final bytes = _archivo != null ? await _archivo!.readAsBytes() : null;
+      final extension = _archivo != null ? _archivo!.name.split('.').last : null;
+      await widget.service.crearPagoPropio(
+        organizacionId: widget.organizacionId,
+        usuarioId: widget.usuario.id,
+        motivo: motivo,
+        montoBase: monto,
+        metodoPago: _metodo,
+        fechaPago: _fechaPago,
+        bytes: bytes,
+        extension: extension,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on CuotaException catch (e) {
+      setState(() => _error = e.message);
+    } catch (_) {
+      setState(() => _error = 'No se pudo registrar el pago. Intentá de nuevo.');
+    } finally {
+      if (mounted) setState(() => _subiendo = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final formatoFecha = DateFormat('dd/MM/yyyy');
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Otro pago', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            'Contanos qué estás pagando y cuánto',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _motivoController,
+            decoration: const InputDecoration(labelText: 'Motivo del pago', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _montoController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Monto (₲)', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 16),
+          Text('Medio de pago', style: Theme.of(context).textTheme.bodyMedium),
+          RadioListTile<String>(
+            contentPadding: EdgeInsets.zero,
+            value: 'efectivo',
+            groupValue: _metodo,
+            title: const Text('Efectivo'),
+            onChanged: (v) => setState(() => _metodo = v!),
+          ),
+          RadioListTile<String>(
+            contentPadding: EdgeInsets.zero,
+            value: 'transferencia',
+            groupValue: _metodo,
+            title: const Text('Transferencia'),
+            onChanged: (v) => setState(() => _metodo = v!),
+          ),
+          if (_metodo == 'transferencia') ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _elegirArchivo,
+              icon: const Icon(Icons.camera_alt_outlined),
+              label: Text(_archivo == null ? 'Elegir foto del comprobante (opcional)' : 'Foto seleccionada ✓'),
+            ),
+          ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _elegirFechaPago,
+            icon: const Icon(Icons.event_outlined),
+            label: Text('Fecha de pago: ${formatoFecha.format(_fechaPago)}'),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: _subiendo ? null : _subir,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.rojoInstitucional,
+              foregroundColor: Colors.white,
+            ),
             child: _subiendo
                 ? const SizedBox(
                     height: 20,

@@ -166,3 +166,40 @@ BalancePagosParada calcularBalancePagos(List<CuotaItem> cuotas) {
     porConductor: listaConductores,
   );
 }
+
+/// Balance de una parada dentro de la vista org-wide "Balance general"
+/// -- mismo cálculo que [calcularBalancePagos], solo que agrupado
+/// primero por parada.
+class GrupoBalanceParada {
+  final String? paradaId;
+  final String? paradaNombre;
+  final BalancePagosParada balance;
+
+  GrupoBalanceParada({required this.paradaId, required this.paradaNombre, required this.balance});
+}
+
+/// Agrupa una lista de cuotas ya cargada org-wide (ver
+/// [ParadaDetalleService.cargarCuotasParaBalanceOrganizacion]) por
+/// parada, calculando el balance de cada una por separado.
+List<GrupoBalanceParada> agruparBalancePorParada(List<CuotaItem> cuotas) {
+  final porParada = <String, List<CuotaItem>>{};
+  final nombres = <String, String?>{};
+  for (final cuota in cuotas) {
+    final clave = cuota.paradaId ?? '__sin_parada__';
+    nombres[clave] = cuota.paradaNombre;
+    porParada.putIfAbsent(clave, () => []).add(cuota);
+  }
+  final lista = porParada.entries
+      .map((entry) => GrupoBalanceParada(
+            paradaId: entry.key == '__sin_parada__' ? null : entry.key,
+            paradaNombre: nombres[entry.key],
+            balance: calcularBalancePagos(entry.value),
+          ))
+      .toList();
+  lista.sort((a, b) {
+    if (a.paradaNombre == null) return 1;
+    if (b.paradaNombre == null) return -1;
+    return a.paradaNombre!.compareTo(b.paradaNombre!);
+  });
+  return lista;
+}

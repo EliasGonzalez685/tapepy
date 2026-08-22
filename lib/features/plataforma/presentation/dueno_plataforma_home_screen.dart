@@ -4,6 +4,7 @@ import '../../../shared/data/organizacion_service.dart';
 import '../../../shared/models/usuario.dart';
 import '../../../shared/widgets/menu_lateral.dart';
 import '../../asociacion/presentation/asociacion_home_screen.dart';
+import '../../asociacion/presentation/balance_general_screen.dart';
 import '../data/presidente_asociacion_service.dart';
 import 'cuentas_bloqueadas_screen.dart';
 import 'cuotas_plataforma_screen.dart';
@@ -105,6 +106,20 @@ class _DuenoPlataformaHomeScreenState extends State<DuenoPlataformaHomeScreen> {
                 navigator.push(
                   MaterialPageRoute(
                     builder: (_) => CuotasPlataformaScreen(usuario: widget.usuario!),
+                  ),
+                );
+              },
+            ),
+            ItemMenuLateral(
+              icono: Icons.bar_chart_outlined,
+              titulo: 'Balance general',
+              onTap: () {
+                final organizacionId = _seleccionada!.id;
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (_) => BalanceGeneralScreen(organizacionId: organizacionId),
                   ),
                 );
               },

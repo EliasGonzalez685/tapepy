@@ -16,6 +16,7 @@ import '../../mensajeria/data/mensajeria_service.dart';
 import '../data/asociacion_dashboard_service.dart';
 import '../data/parada_detalle_service.dart';
 import '../data/parada_resumen.dart';
+import 'balance_general_screen.dart';
 import 'convenios_organizacion_screen.dart';
 import 'estado_plataforma_organizacion_screen.dart';
 import 'imprimir_listado_screen.dart';
@@ -317,6 +318,24 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
               );
             },
           ),
+          // Vista consolidada (plataforma + pagos internos, por parada
+          // y con detalle individual) -- pedido de Elias 2026-08-21.
+          // Solo el presidente real (no cuando el dueño reusa esta
+          // pantalla para supervisar, que ya tiene su propio acceso).
+          if (widget.usuario?.rol == UserRole.presidenteAsociacion)
+            ItemMenuLateral(
+              icono: Icons.bar_chart_outlined,
+              titulo: 'Balance general',
+              onTap: () {
+                final organizacionId = widget.usuario?.organizacionId;
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                if (organizacionId == null) return;
+                navigator.push(
+                  MaterialPageRoute(builder: (_) => BalanceGeneralScreen(organizacionId: organizacionId)),
+                );
+              },
+            ),
           // Solo el presidente de asociación real (no cuando el dueño de
           // plataforma reusa esta pantalla para supervisar) -- pedido
           // explícito de Elias: como mínimo tiene que ver el estado de

@@ -129,6 +129,12 @@ class CuotaItem {
   final DateTime fechaVencimiento;
   final String? loteId;
   final String? metodoPago;
+  // Solo vienen cargados cuando la fila sale de una consulta org-wide
+  // (ver [ParadaDetalleService.cargarCuotasParaBalanceOrganizacion]) --
+  // en la consulta de una sola parada ya se sabe de cuál es, no hace
+  // falta repetirlo acá.
+  final String? paradaId;
+  final String? paradaNombre;
 
   CuotaItem({
     required this.id,
@@ -142,10 +148,13 @@ class CuotaItem {
     required this.fechaVencimiento,
     this.loteId,
     this.metodoPago,
+    this.paradaId,
+    this.paradaNombre,
   });
 
   factory CuotaItem.fromMap(Map<String, dynamic> map) {
     final usuario = map['usuarios'] as Map<String, dynamic>?;
+    final parada = map['paradas'] as Map<String, dynamic>?;
     return CuotaItem(
       id: map['id'] as String,
       usuarioId: map['usuario_id'] as String,
@@ -158,6 +167,8 @@ class CuotaItem {
       fechaVencimiento: DateTime.parse(map['fecha_vencimiento'] as String),
       loteId: map['lote_id'] as String?,
       metodoPago: map['metodo_pago'] as String?,
+      paradaId: map['parada_id'] as String?,
+      paradaNombre: parada?['nombre'] as String?,
     );
   }
 }
@@ -498,6 +509,26 @@ class ParadaDetalleService {
         .select(
             'id, usuario_id, mes, anio, monto_total, estado, motivo, fecha_vencimiento, lote_id, metodo_pago, usuarios!cuotas_mensuales_usuario_id_fkey(nombre)')
         .eq('parada_id', paradaId)
+        .order('anio', ascending: false)
+        .order('mes', ascending: false);
+    return (rows as List)
+        .map((r) => CuotaItem.fromMap(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Igual que [cargarCuotasParaBalance] pero de TODA la organización de
+  /// una, con el nombre de la parada de cada fila -- para "Balance
+  /// general" (pedido de Elias 2026-08-21). Sin filtro de parada_id a
+  /// propósito: la RLS de cuotas_mensuales (cuota_gestionable) ya
+  /// devuelve org-wide para presidente de asociación/dueño, y solo la
+  /// propia parada para presidente de parada -- cada rol ve
+  /// automáticamente lo que le corresponde sin duplicar lógica acá.
+  Future<List<CuotaItem>> cargarCuotasParaBalanceOrganizacion(String organizacionId) async {
+    final rows = await _client
+        .from('cuotas_mensuales')
+        .select(
+            'id, usuario_id, mes, anio, monto_total, estado, motivo, fecha_vencimiento, lote_id, metodo_pago, parada_id, usuarios!cuotas_mensuales_usuario_id_fkey(nombre), paradas(nombre)')
+        .eq('organizacion_id', organizacionId)
         .order('anio', ascending: false)
         .order('mes', ascending: false);
     return (rows as List)

@@ -13,6 +13,7 @@ import '../../../shared/widgets/menu_lateral.dart';
 import '../../../shared/widgets/vehiculos_conductor_sheet.dart';
 import '../../asociacion/data/parada_detalle_service.dart';
 import '../../asociacion/data/parada_resumen.dart';
+import '../../asociacion/presentation/balance_general_screen.dart';
 import '../../asociacion/presentation/balance_pagos_screen.dart';
 import '../../asociacion/presentation/cuota_form_widgets.dart';
 import '../../asociacion/presentation/imprimir_listado_screen.dart';
@@ -478,6 +479,18 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
                           paradaId: _parada!.id,
                           paradaNombre: _parada!.nombre,
                         ),
+                      ),
+                    );
+                  },
+                ),
+                ItemMenuLateral(
+                  icono: Icons.bar_chart_outlined,
+                  titulo: 'Balance general',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BalanceGeneralScreen(organizacionId: _parada!.organizacionId),
                       ),
                     );
                   },

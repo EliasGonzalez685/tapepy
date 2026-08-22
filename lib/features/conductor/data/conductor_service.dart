@@ -416,8 +416,9 @@ class ConductorService {
     required List<Uint8List> paginas,
     DateTime? fechaVencimiento,
     String? descripcion,
+    bool ladoALado = false,
   }) async {
-    final pdfBytes = await _combinarFotosEnPdf(paginas);
+    final pdfBytes = await _combinarFotosEnPdf(paginas, ladoALado: ladoALado);
     final nombreArchivo = '${tipo}_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final path = '$organizacionId/$usuarioId/$nombreArchivo';
 
@@ -443,8 +444,35 @@ class ConductorService {
     });
   }
 
-  Future<Uint8List> _combinarFotosEnPdf(List<Uint8List> paginas) async {
+  /// Si `ladoALado` es true y hay exactamente 2 fotos (frente/verso),
+  /// las pone una al lado de la otra arriba de una sola hoja en vez de
+  /// una hoja por foto (pedido de Elias 2026-08-22, con ejemplo de un
+  /// documento de Word mostrando ambas caras arriba de la página). En
+  /// cualquier otro caso (1 foto, o más de 2, o el usuario no lo pidió)
+  /// se mantiene el comportamiento anterior: una foto por página.
+  Future<Uint8List> _combinarFotosEnPdf(List<Uint8List> paginas, {bool ladoALado = false}) async {
     final doc = pw.Document();
+    if (ladoALado && paginas.length == 2) {
+      final imagen1 = pw.MemoryImage(paginas[0]);
+      final imagen2 = pw.MemoryImage(paginas[1]);
+      doc.addPage(
+        pw.Page(
+          build: (context) => pw.Align(
+            alignment: pw.Alignment.topCenter,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.center,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(child: pw.Image(imagen1, fit: pw.BoxFit.contain)),
+                pw.SizedBox(width: 12),
+                pw.Expanded(child: pw.Image(imagen2, fit: pw.BoxFit.contain)),
+              ],
+            ),
+          ),
+        ),
+      );
+      return doc.save();
+    }
     for (final bytes in paginas) {
       final imagen = pw.MemoryImage(bytes);
       doc.addPage(

@@ -266,6 +266,10 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
   // combinan en un solo PDF al subir (ConductorService.subirDocumento).
   final List<XFile> _archivos = [];
   bool _subiendo = false;
+  // Solo aplica cuando hay exactamente 2 fotos (frente/verso): permite
+  // ponerlas lado a lado arriba de una sola hoja en vez de una hoja por
+  // foto (pedido de Elias 2026-08-22).
+  bool _ladoALado = true;
   final _descripcionController = TextEditingController();
 
   bool get _esOtro => _tipo == 'otro';
@@ -322,6 +326,7 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
         fechaVencimiento: _vencimiento,
         descripcion:
             _descripcionController.text.trim().isEmpty ? null : _descripcionController.text.trim(),
+        ladoALado: _archivos.length == 2 && _ladoALado,
       );
 
       if (!mounted) return;
@@ -422,6 +427,17 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
                 },
               ),
             ),
+          if (_archivos.length == 2) ...[
+            const SizedBox(height: 4),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _ladoALado,
+              onChanged: (value) => setState(() => _ladoALado = value),
+              title: const Text('Frente y verso lado a lado en la misma hoja'),
+              subtitle: const Text('Si lo apagás, cada foto va en su propia hoja'),
+              activeColor: AppTheme.rojoInstitucional,
+            ),
+          ],
           if (_archivos.isNotEmpty) const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: _agregarFoto,

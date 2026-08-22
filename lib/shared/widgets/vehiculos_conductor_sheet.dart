@@ -161,14 +161,6 @@ class _VehiculosConductorSheetState extends State<VehiculosConductorSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Vehículos de ${widget.nombreConductor}', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(
-            'Solo para ver -- el switch elige cuáles entran en los próximos listados impresos.',
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
           const SizedBox(height: 16),
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),

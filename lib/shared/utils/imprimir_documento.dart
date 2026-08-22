@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
@@ -110,51 +111,66 @@ Future<void> compartirBytesPdf({
 }
 
 /// Junta hasta 4 documentos ya subidos (cada uno ya es su propio PDF)
-/// en UNA sola hoja nueva, en grilla -- pedido de Elias 2026-08-22: hay
-/// documentos que conviene tener juntos al imprimir (cédula + cédula
-/// verde + habilitación, por ejemplo). No reemplaza nada: cada
-/// documento sigue existiendo tal cual estaba, esto arma una copia
-/// extra combinada para ver/imprimir/compartir.
+/// en UNA sola hoja nueva, apilados uno debajo del otro a todo el
+/// ancho -- pedido de Elias 2026-08-22: hay documentos que conviene
+/// tener juntos al imprimir (cédula + cédula verde + habilitación, por
+/// ejemplo). No reemplaza nada: cada documento sigue existiendo tal
+/// cual estaba, esto arma una copia extra combinada para ver/imprimir/
+/// compartir.
+///
+/// Cada imagen ocupa una franja de alto fijo (el alto disponible de la
+/// hoja dividido entre la cantidad de documentos elegidos) a todo el
+/// ancho -- pedido de Elias 2026-08-22 (2ª vuelta): la primera versión
+/// las armaba en una grilla que terminaba MUY chica y amontonada en el
+/// medio de la hoja (el `Expanded` de la librería de PDF no repartía
+/// el alto como en Flutter). Con un alto explícito por franja, cada
+/// documento queda grande y legible, como el ejemplo que pasó.
 ///
 /// Rasteriza la primera página de cada PDF de origen a imagen (con
-/// [Printing.raster]) para poder acomodarla en la grilla -- si algún
-/// documento tiene más de una página (frente/verso combinados al
-/// subir), solo entra la primera.
+/// [Printing.raster]) para poder acomodarla -- si algún documento
+/// tiene más de una página (frente/verso combinados al subir), solo
+/// entra la primera.
 Future<Uint8List> combinarDocumentosEnUnaHoja(List<Uint8List> pdfsBytes) async {
   final imagenes = <pw.MemoryImage>[];
   for (final bytes in pdfsBytes) {
-    await for (final pagina in Printing.raster(bytes, pages: [0], dpi: 150)) {
+    await for (final pagina in Printing.raster(bytes, pages: [0], dpi: 200)) {
       final png = await pagina.toPng();
       imagenes.add(pw.MemoryImage(png));
       break;
     }
   }
-
-  final filas = <pw.Widget>[];
-  for (var i = 0; i < imagenes.length; i += 2) {
-    final enFila = imagenes.sublist(i, i + 2 > imagenes.length ? imagenes.length : i + 2);
-    filas.add(
-      pw.Expanded(
-        child: pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            for (final img in enFila)
-              pw.Expanded(
-                child: pw.Padding(
-                  padding: const pw.EdgeInsets.all(8),
-                  child: pw.Image(img, fit: pw.BoxFit.contain),
-                ),
-              ),
-            if (enFila.length == 1) pw.Expanded(child: pw.Container()),
-          ],
-        ),
-      ),
-    );
+  if (imagenes.isEmpty) {
+    final doc = pw.Document();
+    doc.addPage(pw.Page(build: (context) => pw.Container()));
+    return doc.save();
   }
+
+  const pageFormat = PdfPageFormat.a4;
+  const margen = 24.0;
+  const espacio = 14.0;
+  final altoDisponible = pageFormat.height - margen * 2;
+  final altoPorImagen = (altoDisponible - espacio * (imagenes.length - 1)) / imagenes.length;
 
   final doc = pw.Document();
   doc.addPage(
-    pw.Page(build: (context) => pw.Column(children: filas)),
+    pw.Page(
+      pageFormat: pageFormat,
+      margin: const pw.EdgeInsets.all(margen),
+      build: (context) => pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < imagenes.length; i++) ...[
+            if (i > 0) pw.SizedBox(height: espacio),
+            pw.Container(
+              height: altoPorImagen,
+              alignment: pw.Alignment.center,
+              child: pw.Image(imagenes[i], fit: pw.BoxFit.contain),
+            ),
+          ],
+        ],
+      ),
+    ),
   );
   return doc.save();
 }

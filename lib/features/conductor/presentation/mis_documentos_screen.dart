@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/utils/imprimir_documento.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../data/conductor_service.dart';
 
@@ -19,7 +21,11 @@ const _tiposDocumento = {
 
 /// Documentos propios del conductor. Acá es donde se cumple la regla de
 /// producto: cada conductor sube los suyos, nadie lo hace por él — y es
-/// responsable de lo que suba o de lo que le falte.
+/// responsable de lo que suba o de lo que le falte. Pantalla compartida
+/// por los tres roles que suben documentos (conductor, presidente de
+/// parada, presidente de asociación vía "Mi perfil de socio") -- pedido
+/// de Elias 2026-08-22: todos tienen que poder VER lo que ya subieron,
+/// no solo subir.
 class MisDocumentosScreen extends StatefulWidget {
   final ConductorPerfil perfil;
   final String usuarioId;
@@ -57,6 +63,45 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
       ),
     );
     if (subido == true) _refrescar();
+  }
+
+  Future<void> _verDocumento(DocumentoConductorItem doc) async {
+    final etiquetaTipo = _tiposDocumento[doc.tipo]?.$1 ?? doc.tipo;
+    await imprimirArchivoDocumento(
+      context: context,
+      obtenerUrlFirmada: _service.obtenerUrlFirmada,
+      path: doc.archivoUrl,
+      nombreSugerido: '$etiquetaTipo.pdf',
+    );
+  }
+
+  Future<void> _eliminarDocumento(DocumentoConductorItem doc) async {
+    final etiquetaTipo = _tiposDocumento[doc.tipo]?.$1 ?? doc.tipo;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Eliminar documento?'),
+        content: Text('Se va a borrar "$etiquetaTipo". No se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Eliminar', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+    try {
+      await _service.eliminarDocumento(documentoId: doc.id, archivoUrl: doc.archivoUrl);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Documento eliminado')));
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo eliminar. Intentá de nuevo.')));
+    }
   }
 
   Color _colorEstado(String estado) {
@@ -131,38 +176,61 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      IconBadge(icono: Icons.description_outlined, color: color, diametro: 44),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tieneDescripcion ? doc.descripcion! : etiquetaTipo,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.w600)),
-                            if (tieneDescripcion)
-                              Text(etiquetaTipo,
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                            if (doc.fechaVencimiento != null)
-                              Text('Vence ${formatoFecha.format(doc.fechaVencimiento!)}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                          ],
-                        ),
+                      Row(
+                        children: [
+                          IconBadge(icono: Icons.description_outlined, color: color, diametro: 44),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(tieneDescripcion ? doc.descripcion! : etiquetaTipo,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(fontWeight: FontWeight.w600)),
+                                if (tieneDescripcion)
+                                  Text(etiquetaTipo,
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                if (doc.fechaVencimiento != null)
+                                  Text('Vence ${formatoFecha.format(doc.fechaVencimiento!)}',
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(_labelEstado(doc.estado),
+                                style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12)),
+                          ),
+                        ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(_labelEstado(doc.estado),
-                            style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _verDocumento(doc),
+                              icon: const Icon(Icons.visibility_outlined),
+                              label: const Text('Ver'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          IconButton(
+                            icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+                            tooltip: 'Eliminar',
+                            onPressed: () => _eliminarDocumento(doc),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -193,7 +261,9 @@ class _FormularioDocumento extends StatefulWidget {
 class _FormularioDocumentoState extends State<_FormularioDocumento> {
   String _tipo = 'cedula';
   DateTime? _vencimiento;
-  XFile? _archivo;
+  // Una o más fotos -- documentos con frente y verso mandan las dos, se
+  // combinan en un solo PDF al subir (ConductorService.subirDocumento).
+  final List<XFile> _archivos = [];
   bool _subiendo = false;
   final _descripcionController = TextEditingController();
 
@@ -205,7 +275,7 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
     super.dispose();
   }
 
-  Future<void> _elegirArchivo() async {
+  Future<void> _agregarFoto() async {
     final origen = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (context) => SafeArea(
@@ -229,7 +299,11 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
     if (origen == null) return;
     final archivo =
         await ImagePicker().pickImage(source: origen, maxWidth: 1600, imageQuality: 85);
-    if (archivo != null) setState(() => _archivo = archivo);
+    if (archivo != null) setState(() => _archivos.add(archivo));
+  }
+
+  void _quitarFoto(int index) {
+    setState(() => _archivos.removeAt(index));
   }
 
   Future<void> _elegirVencimiento() async {
@@ -243,9 +317,10 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
   }
 
   Future<void> _subir() async {
-    if (_archivo == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Elegí una foto del documento')));
+    if (_archivos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sacá o elegí al menos una foto del documento')),
+      );
       return;
     }
     if (_esOtro && _descripcionController.text.trim().isEmpty) {
@@ -255,8 +330,7 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
     }
     setState(() => _subiendo = true);
     try {
-      final bytes = await _archivo!.readAsBytes();
-      final extension = _archivo!.name.split('.').last;
+      final paginas = await Future.wait(_archivos.map((a) => a.readAsBytes()));
       final categoria = _tiposDocumento[_tipo]?.$2 ?? 'personal';
 
       await widget.service.subirDocumento(
@@ -265,8 +339,7 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
         conductorId: widget.perfil.conductorId,
         categoria: categoria,
         tipo: _tipo,
-        bytes: bytes,
-        extension: extension,
+        paginas: paginas,
         fechaVencimiento: _vencimiento,
         descripcion:
             _descripcionController.text.trim().isEmpty ? null : _descripcionController.text.trim(),
@@ -319,10 +392,62 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
             ),
           ],
           const SizedBox(height: 16),
+          Text('Fotos del documento', style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Si tiene frente y verso, sacá las dos fotos -- se juntan en un solo PDF.',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          if (_archivos.isNotEmpty)
+            SizedBox(
+              height: 90,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _archivos.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 90,
+                        height: 90,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.rojoInstitucional.withValues(alpha: 0.4)),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Image.file(
+                          File(_archivos[index].path),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: -6,
+                        right: -6,
+                        child: GestureDetector(
+                          onTap: () => _quitarFoto(index),
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                            child: const Icon(Icons.close, color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          if (_archivos.isNotEmpty) const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: _elegirArchivo,
-            icon: const Icon(Icons.camera_alt_outlined),
-            label: Text(_archivo == null ? 'Elegir foto del documento' : 'Foto seleccionada ✓'),
+            onPressed: _agregarFoto,
+            icon: const Icon(Icons.add_a_photo_outlined),
+            label: Text(_archivos.isEmpty ? 'Elegir foto del documento' : 'Agregar otra foto (verso, etc.)'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -335,7 +460,10 @@ class _FormularioDocumentoState extends State<_FormularioDocumento> {
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _subiendo ? null : _subir,
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.rojoInstitucional,
+              foregroundColor: Colors.white,
+            ),
             child: _subiendo
                 ? const SizedBox(
                     height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))

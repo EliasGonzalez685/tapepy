@@ -253,6 +253,10 @@ class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
     _initFuture = _inicializar();
   }
 
+  void _reintentarInicializar() {
+    setState(() => _initFuture = _inicializar());
+  }
+
   /// Si es un vehículo nuevo, crea la fila vacía acá mismo para tener un
   /// id y poder subir fotos aunque todavía no se haya guardado
   /// marca/modelo/etc.
@@ -304,7 +308,12 @@ class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
   }
 
   Future<void> _tomarFoto(VehiculoFotoSlot slot) async {
-    if (_vehiculoId == null) return;
+    if (_vehiculoId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Todavía se está preparando el vehículo, esperá un momento y probá de nuevo.')),
+      );
+      return;
+    }
     final origen = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (context) => SafeArea(
@@ -396,6 +405,28 @@ class _VehiculoFormScreenState extends State<_VehiculoFormScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 40, color: Theme.of(context).colorScheme.error),
+                    const SizedBox(height: 12),
+                    const Text('No se pudo preparar el vehículo. Intentá de nuevo.',
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _reintentarInicializar,
+                      style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
+                      child: const Text('Reintentar'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
           return Padding(
             padding: const EdgeInsets.all(20),

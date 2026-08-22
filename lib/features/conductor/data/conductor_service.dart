@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/config/supabase_config.dart';
 
@@ -396,30 +397,34 @@ class ConductorService {
         .toList();
   }
 
-  /// Sube el archivo a `documentos/{organizacionId}/{usuarioId}/...` (así
-  /// lo puede leer el presidente de la misma organización, pero solo el
-  /// propio conductor puede escribir ahí) y crea la fila en
-  /// `documentos_conductor`. El estado se calcula acá mismo según la
-  /// fecha de vencimiento declarada (no hay verificación automática
-  /// todavía, eso queda para más adelante).
+  /// Sube el documento a `documentos/{organizacionId}/{usuarioId}/...`
+  /// (así lo puede leer el presidente de la misma organización, pero
+  /// solo el propio conductor puede escribir ahí) y crea la fila en
+  /// `documentos_conductor`. Recibe una o más fotos (`paginas`) --
+  /// documentos con frente y verso mandan las dos -- y acá mismo se
+  /// combinan en un solo PDF de varias páginas antes de subir, así el
+  /// documento queda como un único archivo prolijo sin importar cuántas
+  /// fotos hicieron falta (pedido de Elias 2026-08-22). El estado se
+  /// calcula acá mismo según la fecha de vencimiento declarada (no hay
+  /// verificación automática todavía, eso queda para más adelante).
   Future<void> subirDocumento({
     required String organizacionId,
     required String usuarioId,
     required String conductorId,
     required String categoria,
     required String tipo,
-    required Uint8List bytes,
-    required String extension,
+    required List<Uint8List> paginas,
     DateTime? fechaVencimiento,
     String? descripcion,
   }) async {
-    final nombreArchivo = '${tipo}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+    final pdfBytes = await _combinarFotosEnPdf(paginas);
+    final nombreArchivo = '${tipo}_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final path = '$organizacionId/$usuarioId/$nombreArchivo';
 
     await _client.storage.from(_bucket).uploadBinary(
           path,
-          bytes,
-          fileOptions: FileOptions(upsert: true, contentType: _contentType(extension)),
+          pdfBytes,
+          fileOptions: const FileOptions(upsert: true, contentType: 'application/pdf'),
         );
 
     final estado = _estadoSegunVencimiento(fechaVencimiento);
@@ -436,6 +441,30 @@ class ConductorService {
       'estado': estado,
       'descripcion': descripcion,
     });
+  }
+
+  Future<Uint8List> _combinarFotosEnPdf(List<Uint8List> paginas) async {
+    final doc = pw.Document();
+    for (final bytes in paginas) {
+      final imagen = pw.MemoryImage(bytes);
+      doc.addPage(
+        pw.Page(build: (context) => pw.Center(child: pw.Image(imagen, fit: pw.BoxFit.contain))),
+      );
+    }
+    return doc.save();
+  }
+
+  /// Borra el documento (fila + archivo del storage). Solo el propio
+  /// conductor puede hacerlo sobre lo suyo (RLS ya lo permite, misma
+  /// policy que el resto de columnas propias).
+  Future<void> eliminarDocumento({required String documentoId, required String archivoUrl}) async {
+    await _client.from('documentos_conductor').delete().eq('id', documentoId);
+    try {
+      await _client.storage.from(_bucket).remove([archivoUrl]);
+    } catch (_) {
+      // La fila ya se borró; si falla la limpieza de storage no es
+      // motivo para que la operación completa se vea como un error.
+    }
   }
 
   Future<List<CuotaPropia>> cargarCuotas(String usuarioId) async {

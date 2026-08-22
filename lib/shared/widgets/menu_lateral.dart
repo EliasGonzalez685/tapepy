@@ -10,7 +10,6 @@ import '../../features/ayuda/presentation/info_aplicacion_screen.dart';
 import '../../features/ayuda/presentation/comentarios_screen.dart';
 import '../../features/ayuda/presentation/condiciones_privacidad_screen.dart';
 import '../../features/ayuda/presentation/centro_ayuda_screen.dart';
-import '../../features/conductor/presentation/mis_cuotas_screen.dart';
 import '../models/user_role.dart';
 import '../models/usuario.dart';
 
@@ -170,24 +169,13 @@ class MenuLateral extends StatelessWidget {
                       },
                     ),
                   ],
-                  // "Mis pagos" para todos los que pagan algo (cuota
-                  // interna y/o cuota de plataforma): conductor,
-                  // presidente de parada, presidente de asociación. El
-                  // dueño de plataforma no le paga a nadie -- a él solo
-                  // le interesan los balances generales (ver
-                  // itemsExtraAdicionales de su propio panel).
-                  if (usuario?.rol != UserRole.duenoPlataforma && usuario?.rol != UserRole.superadmin)
-                    ItemMenuLateral(
-                      icono: Icons.payments_outlined,
-                      titulo: 'Mis pagos',
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        if (usuario == null) return;
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => MisCuotasScreen(usuario: usuario!)),
-                        );
-                      },
-                    ),
+                  // "Mis pagos" NO va acá en el menú lateral -- queda
+                  // donde ya estaba: para el conductor, como parte de
+                  // su panel principal (conductor_home_screen.dart); para
+                  // los presidentes (de parada y de asociación), adentro
+                  // de "Mi perfil de socio" (mi_perfil_socio_screen.dart).
+                  // Pedido explícito de Elias 2026-08-22: no agregar un
+                  // tercer acceso nuevo, mantener esos dos como estaban.
                   // La constancia certifica que alguien es socio
                   // propietario o chofer de una línea de transporte —
                   // solo tiene sentido para el conductor pedirla sobre

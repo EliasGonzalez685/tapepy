@@ -71,7 +71,7 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
     if (reportado == true) _refrescar();
   }
 
-  Future<void> _reportarPagoPlataforma() async {
+  Future<void> _reportarPagoPlataforma({required double montoSugerido}) async {
     final organizacionId = widget.usuario.organizacionId;
     if (organizacionId == null) return;
     final reportado = await showModalBottomSheet<bool>(
@@ -81,6 +81,7 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
       builder: (context) => _FormularioReportarPagoPlataforma(
         usuarioId: widget.usuario.id,
         organizacionId: organizacionId,
+        montoSugerido: montoSugerido,
         service: _servicioPlataforma,
       ),
     );
@@ -121,7 +122,7 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
     );
     if (elegida == null) return;
     if (elegida.esPlataforma) {
-      await _reportarPagoPlataforma();
+      await _reportarPagoPlataforma(montoSugerido: estadoPlataforma!.monto);
     } else if (elegida.esOtro) {
       await _reportarPagoPersonalizado();
     } else {
@@ -366,7 +367,8 @@ class _MisCuotasScreenState extends State<MisCuotasScreen> {
                                       )
                                     else if (!estadoPlataforma.alDia)
                                       OutlinedButton.icon(
-                                        onPressed: _reportarPagoPlataforma,
+                                        onPressed: () => _reportarPagoPlataforma(
+                                            montoSugerido: estadoPlataforma!.monto),
                                         icon: const Icon(Icons.check_circle_outline),
                                         label: const Text('Reportar pago'),
                                       ),
@@ -612,11 +614,25 @@ class _FormularioReportarPago extends StatefulWidget {
 }
 
 class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
+  late final TextEditingController _montoController;
   String _metodo = 'efectivo';
   XFile? _archivo;
   DateTime _fechaPago = DateTime.now();
   bool _subiendo = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _montoController =
+        TextEditingController(text: NumberFormat.decimalPattern('es').format(widget.cuota.montoTotal));
+  }
+
+  @override
+  void dispose() {
+    _montoController.dispose();
+    super.dispose();
+  }
 
   Future<void> _elegirArchivo() async {
     final origen = await showModalBottomSheet<ImageSource>(
@@ -658,6 +674,11 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
   Future<void> _subir() async {
     final organizacionId = widget.usuario.organizacionId;
     if (organizacionId == null) return;
+    final monto = double.tryParse(_montoController.text.trim().replaceAll('.', '').replaceAll(',', '.'));
+    if (monto == null || monto <= 0) {
+      setState(() => _error = 'Ingresá un monto válido.');
+      return;
+    }
     setState(() {
       _subiendo = true;
       _error = null;
@@ -669,6 +690,7 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
         cuotaId: widget.cuota.id,
         usuarioId: widget.usuario.id,
         organizacionId: organizacionId,
+        monto: monto,
         metodoPago: _metodo,
         fechaPago: _fechaPago,
         bytes: bytes,
@@ -707,6 +729,12 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
                 .textTheme
                 .bodySmall
                 ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _montoController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Monto (₲)', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 16),
           Text('Medio de pago', style: Theme.of(context).textTheme.bodyMedium),
@@ -765,10 +793,12 @@ class _FormularioReportarPagoState extends State<_FormularioReportarPago> {
 class _FormularioReportarPagoPlataforma extends StatefulWidget {
   final String usuarioId;
   final String organizacionId;
+  final double montoSugerido;
   final CuotaPlataformaService service;
   const _FormularioReportarPagoPlataforma({
     required this.usuarioId,
     required this.organizacionId,
+    required this.montoSugerido,
     required this.service,
   });
 
@@ -777,11 +807,25 @@ class _FormularioReportarPagoPlataforma extends StatefulWidget {
 }
 
 class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPagoPlataforma> {
+  late final TextEditingController _montoController;
   String _metodo = 'efectivo';
   XFile? _archivo;
   DateTime _fechaPago = DateTime.now();
   bool _subiendo = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _montoController =
+        TextEditingController(text: NumberFormat.decimalPattern('es').format(widget.montoSugerido));
+  }
+
+  @override
+  void dispose() {
+    _montoController.dispose();
+    super.dispose();
+  }
 
   Future<void> _elegirArchivo() async {
     final origen = await showModalBottomSheet<ImageSource>(
@@ -820,6 +864,11 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
   }
 
   Future<void> _subir() async {
+    final monto = double.tryParse(_montoController.text.trim().replaceAll('.', '').replaceAll(',', '.'));
+    if (monto == null || monto <= 0) {
+      setState(() => _error = 'Ingresá un monto válido.');
+      return;
+    }
     setState(() {
       _subiendo = true;
       _error = null;
@@ -830,6 +879,7 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
       await widget.service.reportarPago(
         usuarioId: widget.usuarioId,
         organizacionId: widget.organizacionId,
+        monto: monto,
         metodoPago: _metodo,
         fechaPago: _fechaPago,
         bytes: bytes,
@@ -868,6 +918,12 @@ class _FormularioReportarPagoPlataformaState extends State<_FormularioReportarPa
                 .textTheme
                 .bodySmall
                 ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _montoController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Monto (₲)', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 16),
           Text('Medio de pago', style: Theme.of(context).textTheme.bodyMedium),

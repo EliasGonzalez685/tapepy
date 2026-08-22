@@ -512,12 +512,15 @@ class ConductorService {
   /// bucket privado); si fue en efectivo no hace falta nada más — el
   /// presidente confirma ese pago a mano cuando corresponda. El estado
   /// pasa a 'pagado' automáticamente (reforzado también en la base, ver
-  /// trigger cuotas_proteger_autoservicio); no puede tocar el monto ni
-  /// ningún otro dato de la cuota.
+  /// trigger cuotas_proteger_autoservicio). El monto SÍ se puede
+  /// corregir al reportar -- pedido de Elias 2026-08-22: el usuario
+  /// tiene que poder especificar cuánto pagó realmente, aunque la
+  /// cuota ya traiga un monto sugerido.
   Future<void> reportarPago({
     required String cuotaId,
     required String usuarioId,
     required String organizacionId,
+    required double monto,
     required String metodoPago, // 'efectivo' | 'transferencia'
     required DateTime fechaPago,
     Uint8List? bytes,
@@ -541,6 +544,7 @@ class ConductorService {
         'metodo_pago': metodoPago,
         'fecha_pago': _formatoFecha(fechaPago),
         'estado': 'pagado',
+        'monto_total': monto,
       }).eq('id', cuotaId);
     } on CuotaException {
       rethrow;

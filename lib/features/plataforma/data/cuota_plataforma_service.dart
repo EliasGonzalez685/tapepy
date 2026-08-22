@@ -204,13 +204,17 @@ class CuotaPlataformaService {
   /// El usuario reporta que ya pagó su cuota de plataforma del mes en
   /// curso -- INSERT directo (ya no hay fila pre-generada que
   /// actualizar). El trigger de la base (cuotas_plataforma_
-  /// set_organizacion) fuerza usuario_id/mes/año/estado/monto del lado
-  /// del servidor, así que lo único que manda el cliente es cómo y
-  /// cuándo pagó. Usa el mismo bucket "comprobantes" que cuotas_
-  /// mensuales, con prefijo "plataforma_" para no mezclarse.
+  /// set_organizacion) fuerza usuario_id/mes/año/estado del lado del
+  /// servidor; el monto en cambio sí respeta lo que mande el cliente
+  /// (si viene vacío o inválido, cae al configurado en la
+  /// organización) -- pedido de Elias 2026-08-22: el usuario tiene que
+  /// poder ajustar el monto, aunque haya uno sugerido. Usa el mismo
+  /// bucket "comprobantes" que cuotas_mensuales, con prefijo
+  /// "plataforma_" para no mezclarse.
   Future<void> reportarPago({
     required String usuarioId,
     required String organizacionId,
+    required double monto,
     required String metodoPago, // 'efectivo' | 'transferencia'
     required DateTime fechaPago,
     Uint8List? bytes,
@@ -232,6 +236,7 @@ class CuotaPlataformaService {
       }
       await _client.from('cuotas_plataforma').insert({
         'usuario_id': usuarioId,
+        'monto': monto,
         if (path != null) 'comprobante_url': path,
         'metodo_pago': metodoPago,
         'fecha_pago': _formatoFecha(fechaPago),

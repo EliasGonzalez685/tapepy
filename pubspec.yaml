@@ -33,7 +33,12 @@ dependencies:
   intl: ^0.19.0
   http: ^1.2.0
   path_provider: ^2.1.2
-  share_plus: ^10.1.4       # compartir varios documentos juntos por WhatsApp/etc.
+  # 11.1.0 fijado a propósito: es la primera versión con la API nueva
+  # SharePlus.instance.share(ShareParams(...)) que usamos para compartir
+  # varios documentos juntos. NO subir a 12.x/13.x sin confirmar antes:
+  # esas versiones exigen AGP/Kotlin más nuevo, mismo tipo de problema
+  # que ya tuvimos con file_picker.
+  share_plus: ^11.1.0
   image_picker: ^1.0.7      # subir fotos de documentos/cédulas
   image_cropper: ^8.1.0     # recortar/ajustar la foto antes de subirla (vehículos y documentos)
   # Fijado en 10.3.10 a propósito: 11.0.0/11.0.1/11.0.2 tienen un bug

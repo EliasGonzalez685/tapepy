@@ -96,7 +96,7 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
       );
       return;
     }
-    mostrarCompartirVariosDocumentosSheet(
+    final elegidos = await mostrarCompartirVariosDocumentosSheet(
       context,
       documentos: docs
           .map((d) => (
@@ -107,7 +107,12 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
                 archivoUrl: d.archivoUrl,
               ))
           .toList(),
+    );
+    if (elegidos == null || elegidos.isEmpty || !mounted) return;
+    await compartirVariosDocumentos(
+      context: context,
       obtenerUrlFirmada: _service.obtenerUrlFirmada,
+      documentos: elegidos.map((d) => (path: d.archivoUrl, nombreSugerido: d.etiqueta)).toList(),
     );
   }
 

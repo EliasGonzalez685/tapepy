@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
-import '../utils/imprimir_documento.dart';
 
 /// Un documento ya subido, reducido a lo mínimo que hace falta para
 /// elegirlo y compartirlo -- así este selector sirve tanto para
@@ -8,31 +7,37 @@ import '../utils/imprimir_documento.dart';
 /// (vista de un presidente), sin acoplarse a ninguno de los dos.
 typedef DocumentoParaCompartir = ({String id, String etiqueta, String archivoUrl});
 
-/// Deja elegir varios documentos ya subidos y compartirlos TODOS
+/// Deja elegir varios documentos ya subidos, para compartirlos TODOS
 /// JUNTOS de una sola vez (por WhatsApp, correo, etc.) -- pedido de
 /// Elias 2026-08-22 (3ª vuelta sobre esta idea): la idea anterior era
 /// juntar las fotos en una sola hoja nueva, pero eso no terminó de
-/// funcionar bien con la librería de PDF. Esto es más simple: cada
-/// documento sigue siendo su propio PDF, solo que quien lo recibe los
-/// ve todos en el mismo envío en vez de mandarlos uno por uno.
-void mostrarCompartirVariosDocumentosSheet(
+/// funcionar bien con la librería de PDF.
+///
+/// Esta hoja SOLO elige documentos -- no descarga ni comparte nada
+/// ella misma. Devuelve la lista elegida (o null si se canceló) y es
+/// quien la abrió el que hace `compartirVariosDocumentos` después,
+/// usando SU PROPIO context. Es importante que sea así: si la
+/// descarga/compartir se hacía acá adentro, para cuando terminaba la
+/// descarga esta hoja ya estaba cerrada y su context ya no era válido
+/// -- el diálogo de "cargando" se quedaba trabado para siempre porque
+/// el chequeo `context.mounted` cortaba la función en silencio. Bug
+/// real reportado por Elias 2026-08-24: "se queda cargando cuando doy
+/// para enviar 2 documentos compartidos".
+Future<List<DocumentoParaCompartir>?> mostrarCompartirVariosDocumentosSheet(
   BuildContext context, {
   required List<DocumentoParaCompartir> documentos,
-  required Future<String> Function(String path) obtenerUrlFirmada,
 }) {
-  showModalBottomSheet<void>(
+  return showModalBottomSheet<List<DocumentoParaCompartir>>(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-    builder: (_) =>
-        _CompartirVariosDocumentosSheet(documentos: documentos, obtenerUrlFirmada: obtenerUrlFirmada),
+    builder: (_) => _CompartirVariosDocumentosSheet(documentos: documentos),
   );
 }
 
 class _CompartirVariosDocumentosSheet extends StatefulWidget {
   final List<DocumentoParaCompartir> documentos;
-  final Future<String> Function(String path) obtenerUrlFirmada;
-  const _CompartirVariosDocumentosSheet({required this.documentos, required this.obtenerUrlFirmada});
+  const _CompartirVariosDocumentosSheet({required this.documentos});
 
   @override
   State<_CompartirVariosDocumentosSheet> createState() => _CompartirVariosDocumentosSheetState();
@@ -40,7 +45,6 @@ class _CompartirVariosDocumentosSheet extends StatefulWidget {
 
 class _CompartirVariosDocumentosSheetState extends State<_CompartirVariosDocumentosSheet> {
   final Set<String> _seleccionados = {};
-  bool _procesando = false;
 
   void _alternar(String id, bool? valor) {
     setState(() {
@@ -52,16 +56,9 @@ class _CompartirVariosDocumentosSheetState extends State<_CompartirVariosDocumen
     });
   }
 
-  Future<void> _compartir() async {
-    setState(() => _procesando = true);
+  void _confirmar() {
     final elegidos = widget.documentos.where((d) => _seleccionados.contains(d.id)).toList();
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    await compartirVariosDocumentos(
-      context: context,
-      obtenerUrlFirmada: widget.obtenerUrlFirmada,
-      documentos: elegidos.map((d) => (path: d.archivoUrl, nombreSugerido: d.etiqueta)).toList(),
-    );
+    Navigator.of(context).pop(elegidos);
   }
 
   @override
@@ -101,7 +98,7 @@ class _CompartirVariosDocumentosSheetState extends State<_CompartirVariosDocumen
                   contentPadding: EdgeInsets.zero,
                   activeColor: AppTheme.rojoInstitucional,
                   value: marcado,
-                  onChanged: _procesando ? null : (valor) => _alternar(doc.id, valor),
+                  onChanged: (valor) => _alternar(doc.id, valor),
                   title: Text(doc.etiqueta),
                 );
               },
@@ -115,17 +112,12 @@ class _CompartirVariosDocumentosSheetState extends State<_CompartirVariosDocumen
                   ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: (!puedeCompartir || _procesando) ? null : _compartir,
+            onPressed: puedeCompartir ? _confirmar : null,
             style: FilledButton.styleFrom(
               backgroundColor: AppTheme.rojoInstitucional,
               foregroundColor: Colors.white,
             ),
-            icon: _procesando
-                ? const SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.share_outlined, color: Colors.white),
+            icon: const Icon(Icons.share_outlined, color: Colors.white),
             label: const Text('Compartir', style: TextStyle(color: Colors.white)),
           ),
         ],

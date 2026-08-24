@@ -95,12 +95,17 @@ class _DocumentosConductorSheetState extends State<DocumentosConductorSheet> {
       );
       return;
     }
-    mostrarCompartirVariosDocumentosSheet(
+    final elegidos = await mostrarCompartirVariosDocumentosSheet(
       context,
       documentos: docs
           .map((d) => (id: d.id, etiqueta: _labelTipo(d), archivoUrl: d.archivoUrl))
           .toList(),
+    );
+    if (elegidos == null || elegidos.isEmpty || !mounted) return;
+    await compartirVariosDocumentos(
+      context: context,
       obtenerUrlFirmada: widget.service.obtenerUrlFirmada,
+      documentos: elegidos.map((d) => (path: d.archivoUrl, nombreSugerido: d.etiqueta)).toList(),
     );
   }
 

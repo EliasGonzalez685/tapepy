@@ -126,6 +126,14 @@ Future<void> compartirBytesPdf({
 /// el alto como en Flutter). Con un alto explícito por franja, cada
 /// documento queda grande y legible, como el ejemplo que pasó.
 ///
+/// (3ª vuelta) Con solo la altura fija en el `Container` las fotos
+/// SEGUÍAN saliendo chiquitas arriba de cada franja: en esta librería
+/// `BoxFit.contain` necesita que la imagen misma reciba un ancho Y un
+/// alto explícitos para escalar hasta ese tamaño -- si solo el
+/// contenedor los tiene, la imagen se dibuja a un tamaño propio chico
+/// en vez de crecer para llenar la franja. Ahora el ancho y el alto se
+/// le pasan directo a `pw.Image`.
+///
 /// Rasteriza la primera página de cada PDF de origen a imagen (con
 /// [Printing.raster]) para poder acomodarla -- si algún documento
 /// tiene más de una página (frente/verso combinados al subir), solo
@@ -148,6 +156,7 @@ Future<Uint8List> combinarDocumentosEnUnaHoja(List<Uint8List> pdfsBytes) async {
   const pageFormat = PdfPageFormat.a4;
   const margen = 24.0;
   const espacio = 14.0;
+  final anchoDisponible = pageFormat.width - margen * 2;
   final altoDisponible = pageFormat.height - margen * 2;
   final altoPorImagen = (altoDisponible - espacio * (imagenes.length - 1)) / imagenes.length;
 
@@ -158,14 +167,15 @@ Future<Uint8List> combinarDocumentosEnUnaHoja(List<Uint8List> pdfsBytes) async {
       margin: const pw.EdgeInsets.all(margen),
       build: (context) => pw.Column(
         mainAxisSize: pw.MainAxisSize.min,
-        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           for (var i = 0; i < imagenes.length; i++) ...[
             if (i > 0) pw.SizedBox(height: espacio),
-            pw.Container(
+            pw.Image(
+              imagenes[i],
+              width: anchoDisponible,
               height: altoPorImagen,
-              alignment: pw.Alignment.center,
-              child: pw.Image(imagenes[i], fit: pw.BoxFit.contain),
+              fit: pw.BoxFit.contain,
             ),
           ],
         ],

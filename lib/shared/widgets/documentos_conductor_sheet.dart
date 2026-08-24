@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/asociacion/data/parada_detalle_service.dart';
 import '../utils/imprimir_documento.dart';
-import 'combinar_documentos_sheet.dart';
+import 'compartir_varios_documentos_sheet.dart';
 import 'icon_badge.dart';
 
 /// Atajo para abrir los documentos de un conductor puntual desde
@@ -86,16 +86,16 @@ class _DocumentosConductorSheetState extends State<DocumentosConductorSheet> {
           ? item.descripcion!
           : (_labelsTipo[item.tipo] ?? item.tipo);
 
-  Future<void> _abrirCombinar() async {
+  Future<void> _abrirCompartirVarios() async {
     final docs = await _future;
     if (!mounted) return;
     if (docs.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Necesita al menos 2 documentos subidos para juntar.')),
+        const SnackBar(content: Text('Necesita al menos 2 documentos subidos para compartir juntos.')),
       );
       return;
     }
-    mostrarCombinarDocumentosSheet(
+    mostrarCompartirVariosDocumentosSheet(
       context,
       documentos: docs
           .map((d) => (id: d.id, etiqueta: _labelTipo(d), archivoUrl: d.archivoUrl))
@@ -124,9 +124,9 @@ class _DocumentosConductorSheetState extends State<DocumentosConductorSheet> {
                     style: Theme.of(context).textTheme.titleLarge),
               ),
               IconButton(
-                icon: const Icon(Icons.grid_view_outlined),
-                tooltip: 'Juntar documentos en una hoja',
-                onPressed: _abrirCombinar,
+                icon: const Icon(Icons.ios_share_outlined),
+                tooltip: 'Compartir varios documentos',
+                onPressed: _abrirCompartirVarios,
               ),
             ],
           ),

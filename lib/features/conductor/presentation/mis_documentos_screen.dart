@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/imprimir_documento.dart';
 import '../../../shared/utils/seleccionar_foto.dart';
-import '../../../shared/widgets/combinar_documentos_sheet.dart';
+import '../../../shared/widgets/compartir_varios_documentos_sheet.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../data/conductor_service.dart';
 
@@ -87,16 +87,16 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
     );
   }
 
-  Future<void> _abrirCombinar() async {
+  Future<void> _abrirCompartirVarios() async {
     final docs = await _future;
     if (!mounted) return;
     if (docs.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Necesitás al menos 2 documentos subidos para juntar.')),
+        const SnackBar(content: Text('Necesitás al menos 2 documentos subidos para compartir juntos.')),
       );
       return;
     }
-    mostrarCombinarDocumentosSheet(
+    mostrarCompartirVariosDocumentosSheet(
       context,
       documentos: docs
           .map((d) => (
@@ -166,9 +166,9 @@ class _MisDocumentosScreenState extends State<MisDocumentosScreen> {
         title: const Text('Mis documentos'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.grid_view_outlined),
-            tooltip: 'Juntar documentos en una hoja',
-            onPressed: _abrirCombinar,
+            icon: const Icon(Icons.ios_share_outlined),
+            tooltip: 'Compartir varios documentos',
+            onPressed: _abrirCompartirVarios,
           ),
         ],
       ),

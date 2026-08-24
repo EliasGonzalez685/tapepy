@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:pdf/pdf.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Abre el diálogo nativo de impresión/guardado con el archivo REAL de
 /// un documento subido (cédula, licencia, habilitación municipal,
@@ -75,114 +77,47 @@ Future<void> compartirArchivoDocumento({
   }
 }
 
-/// Abre el diálogo nativo de imprimir/guardar para un PDF que ya está
-/// armado en memoria (no hay que resolver ninguna URL) -- se usa para
-/// el resultado de [combinarDocumentosEnUnaHoja].
-Future<void> imprimirBytesPdf({
+/// Deja compartir VARIOS documentos ya subidos de una sola vez --
+/// cada uno sigue siendo su propio PDF, WhatsApp (u otra app) los
+/// recibe todos juntos en el mismo envío en vez de mandarlos uno por
+/// uno. Pedido de Elias 2026-08-22: la idea anterior era juntar las
+/// fotos en una sola hoja nueva armada por la app, pero la librería de
+/// PDF no terminó de cooperar con ese layout -- esto es más simple y
+/// resuelve lo que realmente hacía falta (mandar varios documentos
+/// juntos), sin tener que dibujar nada nuevo.
+Future<void> compartirVariosDocumentos({
   required BuildContext context,
-  required Uint8List bytes,
-  required String nombreSugerido,
+  required Future<String> Function(String path) obtenerUrlFirmada,
+  required List<({String path, String nombreSugerido})> documentos,
 }) async {
-  try {
-    await Printing.layoutPdf(onLayout: (_) async => bytes, name: nombreSugerido);
-  } catch (_) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No se pudo abrir el documento. Intentá de nuevo.')),
-    );
-  }
-}
-
-/// Igual que [compartirArchivoDocumento] pero para un PDF que ya está
-/// armado en memoria.
-Future<void> compartirBytesPdf({
-  required BuildContext context,
-  required Uint8List bytes,
-  required String nombreSugerido,
-}) async {
-  try {
-    await Printing.sharePdf(bytes: bytes, filename: nombreSugerido);
-  } catch (_) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No se pudo compartir el documento. Intentá de nuevo.')),
-    );
-  }
-}
-
-/// Junta hasta 4 documentos ya subidos (cada uno ya es su propio PDF)
-/// en UNA sola hoja nueva, apilados uno debajo del otro a todo el
-/// ancho -- pedido de Elias 2026-08-22: hay documentos que conviene
-/// tener juntos al imprimir (cédula + cédula verde + habilitación, por
-/// ejemplo). No reemplaza nada: cada documento sigue existiendo tal
-/// cual estaba, esto arma una copia extra combinada para ver/imprimir/
-/// compartir.
-///
-/// Cada imagen ocupa una franja de alto fijo (el alto disponible de la
-/// hoja dividido entre la cantidad de documentos elegidos) a todo el
-/// ancho -- pedido de Elias 2026-08-22 (2ª vuelta): la primera versión
-/// las armaba en una grilla que terminaba MUY chica y amontonada en el
-/// medio de la hoja (el `Expanded` de la librería de PDF no repartía
-/// el alto como en Flutter). Con un alto explícito por franja, cada
-/// documento queda grande y legible, como el ejemplo que pasó.
-///
-/// (3ª vuelta) Con solo la altura fija en el `Container` las fotos
-/// SEGUÍAN saliendo chiquitas arriba de cada franja: en esta librería
-/// `BoxFit.contain` necesita que la imagen misma reciba un ancho Y un
-/// alto explícitos para escalar hasta ese tamaño -- si solo el
-/// contenedor los tiene, la imagen se dibuja a un tamaño propio chico
-/// en vez de crecer para llenar la franja. Ahora el ancho y el alto se
-/// le pasan directo a `pw.Image`.
-///
-/// Rasteriza la primera página de cada PDF de origen a imagen (con
-/// [Printing.raster]) para poder acomodarla -- si algún documento
-/// tiene más de una página (frente/verso combinados al subir), solo
-/// entra la primera.
-Future<Uint8List> combinarDocumentosEnUnaHoja(List<Uint8List> pdfsBytes) async {
-  final imagenes = <pw.MemoryImage>[];
-  for (final bytes in pdfsBytes) {
-    await for (final pagina in Printing.raster(bytes, pages: [0], dpi: 200)) {
-      final png = await pagina.toPng();
-      imagenes.add(pw.MemoryImage(png));
-      break;
-    }
-  }
-  if (imagenes.isEmpty) {
-    final doc = pw.Document();
-    doc.addPage(pw.Page(build: (context) => pw.Container()));
-    return doc.save();
-  }
-
-  const pageFormat = PdfPageFormat.a4;
-  const margen = 24.0;
-  const espacio = 14.0;
-  final anchoDisponible = pageFormat.width - margen * 2;
-  final altoDisponible = pageFormat.height - margen * 2;
-  final altoPorImagen = (altoDisponible - espacio * (imagenes.length - 1)) / imagenes.length;
-
-  final doc = pw.Document();
-  doc.addPage(
-    pw.Page(
-      pageFormat: pageFormat,
-      margin: const pw.EdgeInsets.all(margen),
-      build: (context) => pw.Column(
-        mainAxisSize: pw.MainAxisSize.min,
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
-        children: [
-          for (var i = 0; i < imagenes.length; i++) ...[
-            if (i > 0) pw.SizedBox(height: espacio),
-            pw.Image(
-              imagenes[i],
-              width: anchoDisponible,
-              height: altoPorImagen,
-              fit: pw.BoxFit.contain,
-            ),
-          ],
-        ],
-      ),
-    ),
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
   );
-  return doc.save();
+
+  try {
+    final temporal = await getTemporaryDirectory();
+    final archivos = <XFile>[];
+    for (final doc in documentos) {
+      final bytes = await _descargarComoPdf(obtenerUrlFirmada, doc.path);
+      final nombre =
+          doc.nombreSugerido.toLowerCase().endsWith('.pdf') ? doc.nombreSugerido : '${doc.nombreSugerido}.pdf';
+      final sello = DateTime.now().microsecondsSinceEpoch;
+      final archivoTemporal = File('${temporal.path}/${sello}_$nombre');
+      await archivoTemporal.writeAsBytes(bytes);
+      archivos.add(XFile(archivoTemporal.path, mimeType: 'application/pdf', name: nombre));
+    }
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    await SharePlus.instance.share(ShareParams(files: archivos));
+  } catch (_) {
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No se pudieron compartir los documentos. Intentá de nuevo.')),
+    );
+  }
 }
 
 Future<Uint8List> _descargarComoPdf(

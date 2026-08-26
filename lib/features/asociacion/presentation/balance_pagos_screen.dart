@@ -48,6 +48,7 @@ class BalancePagosScreen extends StatefulWidget {
 class _BalancePagosScreenState extends State<BalancePagosScreen> {
   late Future<BalancePagosParada> _future;
   bool _generandoPdf = false;
+  bool _compartiendoPdf = false;
 
   @override
   void initState() {
@@ -73,6 +74,20 @@ class _BalancePagosScreenState extends State<BalancePagosScreen> {
     }
   }
 
+  Future<void> _compartirPdf(BalancePagosParada balance) async {
+    setState(() => _compartiendoPdf = true);
+    try {
+      final bytes = await _construirPdfBalance(paradaNombre: widget.paradaNombre, balance: balance);
+      await Printing.sharePdf(bytes: bytes, filename: 'balance_pagos.pdf');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo compartir el PDF. Intentá de nuevo.')));
+    } finally {
+      if (mounted) setState(() => _compartiendoPdf = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final formatoMonto = NumberFormat.decimalPattern('es');
@@ -85,15 +100,30 @@ class _BalancePagosScreenState extends State<BalancePagosScreen> {
             builder: (context, snapshot) {
               final balance = snapshot.data;
               if (balance == null || balance.estaVacio) return const SizedBox.shrink();
-              return IconButton(
-                icon: _generandoPdf
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.picture_as_pdf_outlined),
-                tooltip: 'Exportar a PDF',
-                onPressed: _generandoPdf ? null : () => _generarPdf(balance),
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: _generandoPdf
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.picture_as_pdf_outlined),
+                    tooltip: 'Exportar a PDF',
+                    onPressed: _generandoPdf ? null : () => _generarPdf(balance),
+                  ),
+                  IconButton(
+                    icon: _compartiendoPdf
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.share_outlined),
+                    tooltip: 'Compartir PDF',
+                    onPressed: _compartiendoPdf ? null : () => _compartirPdf(balance),
+                  ),
+                ],
               );
             },
           ),

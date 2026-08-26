@@ -284,7 +284,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
     setState(() => _organizacionNombre = nombre);
   }
 
-  Future<void> _generarPdf() async {
+  Future<void> _generarPdf({bool compartir = false}) async {
     if (_seleccionadas.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Elegí al menos una columna')));
@@ -306,7 +306,11 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
       final secciones = await _construirSeccionUnica(items);
 
       final bytes = await _construirPdf(secciones: secciones, columnas: columnas);
-      await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'listado_socios.pdf');
+      if (compartir) {
+        await Printing.sharePdf(bytes: bytes, filename: 'listado_socios.pdf');
+      } else {
+        await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'listado_socios.pdf');
+      }
     } finally {
       if (mounted) setState(() => _generando = false);
     }
@@ -519,6 +523,14 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.picture_as_pdf_outlined),
                 label: Text(_generando ? 'Generando...' : 'Generar PDF'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: (_generando || cantidadSeleccionada == 0)
+                    ? null
+                    : () => _generarPdf(compartir: true),
+                icon: const Icon(Icons.share_outlined),
+                label: const Text('Compartir PDF'),
               ),
               if (items.isEmpty) ...[
                 const SizedBox(height: 12),

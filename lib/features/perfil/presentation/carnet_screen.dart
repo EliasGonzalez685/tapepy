@@ -11,6 +11,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/config/supabase_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/perfil_service.dart';
+import 'qr_pdf.dart';
 
 /// Carnet digital del socio: vertical, frente y reverso (se toca la
 /// tarjeta para dar vuelta). Muestra la organización (Traude), no la
@@ -30,6 +31,8 @@ class _CarnetScreenState extends State<CarnetScreen> {
   final _service = PerfilService();
   late Future<CarnetData> _future;
   bool _generandoPdf = false;
+  bool _compartiendoPdf = false;
+  bool _compartiendoQr = false;
 
   @override
   void initState() {
@@ -47,6 +50,32 @@ class _CarnetScreenState extends State<CarnetScreen> {
       );
     } finally {
       if (mounted) setState(() => _generandoPdf = false);
+    }
+  }
+
+  Future<void> _compartirPdf(CarnetData datos) async {
+    setState(() => _compartiendoPdf = true);
+    try {
+      final bytes = await _generarPdf(datos);
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'carnet_${datos.nombre.replaceAll(' ', '_')}.pdf',
+      );
+    } finally {
+      if (mounted) setState(() => _compartiendoPdf = false);
+    }
+  }
+
+  Future<void> _compartirQr(CarnetData datos) async {
+    setState(() => _compartiendoQr = true);
+    try {
+      final bytes = await generarPdfQr(datos);
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'qr_${datos.nombre.replaceAll(' ', '_')}.pdf',
+      );
+    } finally {
+      if (mounted) setState(() => _compartiendoQr = false);
     }
   }
 
@@ -91,10 +120,34 @@ class _CarnetScreenState extends State<CarnetScreen> {
                     : const Icon(Icons.picture_as_pdf_outlined),
                 label: Text(_generandoPdf ? 'Generando...' : 'Descargar / Imprimir PDF'),
               ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _compartiendoPdf ? null : () => _compartirPdf(datos),
+                icon: _compartiendoPdf
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.share_outlined),
+                label: Text(_compartiendoPdf ? 'Generando...' : 'Compartir PDF'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _compartiendoQr ? null : () => _compartirQr(datos),
+                icon: _compartiendoQr
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.qr_code_2_outlined),
+                label: Text(_compartiendoQr ? 'Generando...' : 'Compartir QR'),
+              ),
               const SizedBox(height: 12),
               Text(
-                'El código QR todavía no se puede escanear para verificar — '
-                'esa función se habilita en una próxima etapa.',
+                'Escaneando el código QR se puede verificar la membresía sin '
+                'necesidad de tener la app instalada.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context)
                     .textTheme

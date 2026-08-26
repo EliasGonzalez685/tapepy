@@ -35,6 +35,7 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
   late Future<_DatosConstancia> _future;
   bool _solicitando = false;
   bool _generandoPdf = false;
+  bool _compartiendoPdf = false;
 
   @override
   void initState() {
@@ -112,6 +113,28 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
     }
   }
 
+  Future<void> _compartir(String solicitudId) async {
+    setState(() => _compartiendoPdf = true);
+    try {
+      final datos = await _constanciaService.cargarParaImprimir(solicitudId);
+
+      String? nombreAsociacion;
+      final presidenteId = await _firmaService.obtenerPresidenteAsociacionId(datos.organizacionId);
+      if (presidenteId != null) {
+        nombreAsociacion = await _firmaService.cargarNombreUsuario(presidenteId);
+      }
+
+      final bytes = await construirPdfConstancia(datos, nombreAsociacion: nombreAsociacion);
+      await Printing.sharePdf(bytes: bytes, filename: 'constancia.pdf');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo compartir el PDF. Intentá de nuevo.')));
+    } finally {
+      if (mounted) setState(() => _compartiendoPdf = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,8 +174,10 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
                     solicitud: datos.solicitud,
                     solicitando: _solicitando,
                     generandoPdf: _generandoPdf,
+                    compartiendoPdf: _compartiendoPdf,
                     onSolicitar: () => _solicitar(perfil),
                     onImprimir: (id) => _imprimir(id),
+                    onCompartir: (id) => _compartir(id),
                   ),
               ],
             );
@@ -167,15 +192,19 @@ class _ContenidoSolicitud extends StatelessWidget {
   final MiSolicitudConstancia? solicitud;
   final bool solicitando;
   final bool generandoPdf;
+  final bool compartiendoPdf;
   final VoidCallback onSolicitar;
   final void Function(String solicitudId) onImprimir;
+  final void Function(String solicitudId) onCompartir;
 
   const _ContenidoSolicitud({
     required this.solicitud,
     required this.solicitando,
     required this.generandoPdf,
+    required this.compartiendoPdf,
     required this.onSolicitar,
     required this.onImprimir,
+    required this.onCompartir,
   });
 
   @override
@@ -214,9 +243,21 @@ class _ContenidoSolicitud extends StatelessWidget {
                 : const Icon(Icons.picture_as_pdf_outlined),
             label: const Text('Generar PDF'),
           ),
-          extra: TextButton(
-            onPressed: solicitando ? null : onSolicitar,
-            child: const Text('Solicitar una nueva'),
+          extra: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OutlinedButton.icon(
+                onPressed: compartiendoPdf ? null : () => onCompartir(solicitud!.id),
+                icon: compartiendoPdf
+                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.share_outlined),
+                label: Text(compartiendoPdf ? 'Generando...' : 'Compartir PDF'),
+              ),
+              TextButton(
+                onPressed: solicitando ? null : onSolicitar,
+                child: const Text('Solicitar una nueva'),
+              ),
+            ],
           ),
         );
       case 'rechazada':

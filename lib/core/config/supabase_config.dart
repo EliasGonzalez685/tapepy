@@ -26,19 +26,24 @@ class SupabaseConfig {
   /// del carnet digital, para que cualquier lector de QR del teléfono
   /// la abra directo, sin necesidad de tener la app instalada.
   ///
-  /// Apunta a la páginita estática de Traude Web en GitHub Pages
-  /// (repo aparte: github.com/EliasGonzalez685/traude-web,
+  /// Apunta a la páginita estática de Traude Web, deployada en Vercel
+  /// (mismo repo: github.com/EliasGonzalez685/traude-web,
   /// verificar-carnet.html), NO directo a la Edge Function
   /// `verificar-carnet` -- el dominio *.supabase.co fuerza el
   /// Content-Type de las Edge Functions a text/plain (limitación de la
   /// plataforma, ver comentario en esa función), así que un link
   /// directo mostraría el HTML como texto plano en vez de renderizarlo.
-  /// La página de GitHub Pages le pide los datos a esa función por
-  /// fetch() y sí los renderiza bien.
+  /// La página deployada le pide los datos a esa función por fetch()
+  /// y sí los renderiza bien.
   ///
-  /// Antes apuntaba a eliasgonzalez685.github.io/tapepy/ (repo de la
-  /// app) -- era momentáneo, según lo dicho por Elias, hasta tener el
-  /// sitio de Traude Web listo y publicado. Cambiado el 2026-08-25.
+  /// URL de Vercel (traude-tour.vercel.app) elegida por Elias en vez de
+  /// GitHub Pages porque no quería que su usuario personal
+  /// (eliasgonzalez685) apareciera en la URL que ve el cliente. Es un
+  /// dominio .vercel.app gratuito, momentáneo, hasta que se compre un
+  /// dominio propio para el sitio -- cuando eso pase, actualizar esta
+  /// constante de nuevo. Cambiado el 2026-08-25 (antes apuntaba a
+  /// eliasgonzalez685.github.io/traude-web/, y antes de eso a
+  /// eliasgonzalez685.github.io/tapepy/).
   static String urlVerificacionCarnet(String qrToken) =>
-      'https://eliasgonzalez685.github.io/traude-web/verificar-carnet.html?token=$qrToken';
+      'https://traude-tour.vercel.app/verificar-carnet.html?token=$qrToken';
 }

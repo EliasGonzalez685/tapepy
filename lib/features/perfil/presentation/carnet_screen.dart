@@ -195,8 +195,10 @@ class _CarnetFlipCardState extends State<_CarnetFlipCard>
 
   @override
   Widget build(BuildContext context) {
-    const ancho = 270.0;
-    const alto = ancho / 0.55; // más alargado que un CR80 real — pedido explícito
+    // Tamaño reducido pedido por Elias 2026-08-25: misma proporción que
+    // el carnet en PDF (50mm x 90mm, ver _cardWmm/_cardHmm más abajo).
+    const ancho = 250.0;
+    const alto = ancho * 1.8;
 
     return GestureDetector(
       onTap: _voltear,
@@ -327,8 +329,8 @@ class _CaraFrente extends StatelessWidget {
           const _EncabezadoOrganizacion(),
           const SizedBox(height: 12),
           Container(
-            width: 140,
-            height: 140,
+            width: 128,
+            height: 128,
             decoration: BoxDecoration(
               color: AppTheme.rojoInstitucional.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
@@ -341,10 +343,10 @@ class _CaraFrente extends StatelessWidget {
             child: datos.fotoPerfilUrl == null
                 ? Text(inicial,
                     style: const TextStyle(
-                        color: AppTheme.rojoInstitucional, fontSize: 46, fontWeight: FontWeight.bold))
+                        color: AppTheme.rojoInstitucional, fontSize: 42, fontWeight: FontWeight.bold))
                 : null,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
@@ -354,7 +356,7 @@ class _CaraFrente extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context)
                   .textTheme
-                  .titleLarge
+                  .titleMedium
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
@@ -403,27 +405,44 @@ class _CaraReverso extends StatelessWidget {
           const Spacer(),
           QrImageView(
             data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
-            size: 150,
+            size: 138,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
               'Escaneá para verificar la membresía',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ),
           const Spacer(),
           Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Text('TRAUDE',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Column(
+              children: [
+                Text(
+                  'SERVICIO INTERNACIONAL DE VIAJES',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.4,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'PASAJES · EXCURSIONES · HOTELES · RECEPTIVOS · TRASLADO',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 8, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 6),
+                const _FilaBanderas(),
+              ],
+            ),
           ),
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -452,13 +471,81 @@ class _CampoCarnet extends StatelessWidget {
   }
 }
 
+/// Banderitas de Argentina/Paraguay/Brasil para el reverso del carnet
+/// -- pedido de Elias 2026-08-25, junto con el texto de servicios
+/// (rubro histórico de la asociación). De franjas horizontales para
+/// Argentina/Paraguay; Brasil simplificada a verde con un círculo
+/// amarillo en el centro (en vez del rombo real) para que se vea bien
+/// nítida en un ícono tan chico.
+class _FranjaBandera extends StatelessWidget {
+  final List<Color> colores;
+  const _FranjaBandera(this.colores);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 15,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: Colors.black12, width: 0.5),
+      ),
+      child: Column(
+        children: colores.map((c) => Expanded(child: Container(color: c))).toList(),
+      ),
+    );
+  }
+}
+
+class _BanderaBrasil extends StatelessWidget {
+  const _BanderaBrasil();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 15,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFF009739),
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: Colors.black12, width: 0.5),
+      ),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFFEDD00)),
+      ),
+    );
+  }
+}
+
+class _FilaBanderas extends StatelessWidget {
+  const _FilaBanderas();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _FranjaBandera([Color(0xFF75AADB), Colors.white, Color(0xFF75AADB)]), // Argentina
+        SizedBox(width: 5),
+        _FranjaBandera([Color(0xFFD52B1E), Colors.white, Color(0xFF0038A8)]), // Paraguay
+        SizedBox(width: 5),
+        _BanderaBrasil(),
+      ],
+    );
+  }
+}
+
 /// ---------------------------------------------------------------------
 /// PDF — frente y reverso lado a lado en una sola página vertical
 /// alargada, para verse los dos de una sin pasar de hoja.
 /// ---------------------------------------------------------------------
 
-const _cardWmm = 54.0;
-const _cardHmm = 97.0; // más alargado que un CR80 real — pedido explícito
+const _cardWmm = 50.0; // 5cm de ancho -- achicado a pedido de Elias 2026-08-25
+const _cardHmm = 90.0; // 9cm de largo -- ídem, más alargado que un CR80 real
 const _gapMm = 6.0;
 const _pageMarginMm = 5.0;
 
@@ -560,29 +647,31 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
     pw.Column(
       children: [
         encabezado(),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.ClipRRect(
           horizontalRadius: 8,
           verticalRadius: 8,
           child: fotoImage != null
-              ? pw.Image(fotoImage, width: 92, height: 92, fit: pw.BoxFit.cover)
+              ? pw.Image(fotoImage, width: 80, height: 80, fit: pw.BoxFit.cover)
               : pw.Container(
-                  width: 92,
-                  height: 92,
+                  width: 80,
+                  height: 80,
                   color: PdfColors.grey300,
                   alignment: pw.Alignment.center,
                   child: pw.Text(
                     datos.nombre.trim().isNotEmpty ? datos.nombre.trim()[0].toUpperCase() : '?',
-                    style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold, color: rojo),
+                    style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: rojo),
                   ),
                 ),
         ),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(horizontal: 6),
           child: pw.Text(datos.nombre,
               textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+              maxLines: 2,
+              overflow: pw.TextOverflow.clip,
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
         ),
         pw.Text(datos.rolLabel,
             style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
@@ -604,10 +693,10 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
             ],
           ),
         ),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.Container(
           width: double.infinity,
-          padding: const pw.EdgeInsets.symmetric(vertical: 6),
+          padding: const pw.EdgeInsets.symmetric(vertical: 5),
           color: PdfColor.fromHex('#F3DEDE'),
           child: pw.Text(
             'Valido ${formatoFecha.format(datos.emision)} - ${formatoFecha.format(datos.vencimiento)}',
@@ -619,6 +708,43 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
     ),
   );
 
+  // Banderitas de Argentina/Paraguay/Brasil para el pie del reverso --
+  // mismo criterio que la versión en pantalla (ver _FranjaBandera /
+  // _BanderaBrasil en carnet_screen.dart): franjas horizontales para
+  // Argentina/Paraguay, y Brasil simplificada a verde con un círculo
+  // amarillo en el centro para que se vea nítida en un ícono chico.
+  pw.Widget franjaBandera(List<PdfColor> colores) => pw.Container(
+        width: 18,
+        height: 12,
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey400, width: 0.3),
+          borderRadius: pw.BorderRadius.circular(1),
+        ),
+        child: pw.ClipRRect(
+          horizontalRadius: 1,
+          verticalRadius: 1,
+          child: pw.Column(
+            children: colores.map((c) => pw.Expanded(child: pw.Container(color: c))).toList(),
+          ),
+        ),
+      );
+
+  pw.Widget banderaBrasil() => pw.Container(
+        width: 18,
+        height: 12,
+        alignment: pw.Alignment.center,
+        decoration: pw.BoxDecoration(
+          color: PdfColor.fromHex('#009739'),
+          border: pw.Border.all(color: PdfColors.grey400, width: 0.3),
+          borderRadius: pw.BorderRadius.circular(1),
+        ),
+        child: pw.Container(
+          width: 7,
+          height: 7,
+          decoration: pw.BoxDecoration(shape: pw.BoxShape.circle, color: PdfColor.fromHex('#FEDD00')),
+        ),
+      );
+
   final reverso = marco(
     pw.Column(
       children: [
@@ -627,25 +753,48 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
         pw.BarcodeWidget(
           barcode: pw.Barcode.qrCode(),
           data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
-          width: 90,
-          height: 90,
+          width: 78,
+          height: 78,
         ),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 8),
         pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 12),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10),
           child: pw.Text(
             'Escanea para verificar la membresia',
             textAlign: pw.TextAlign.center,
-            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
           ),
         ),
         pw.Spacer(),
         pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 10),
-          child: pw.Text('TRAUDE',
-              style: pw.TextStyle(
-                  fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey600)),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8),
+          child: pw.Column(
+            children: [
+              pw.Text('SERVICIO INTERNACIONAL DE VIAJES',
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(
+                      fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.SizedBox(height: 2),
+              pw.Text('PASAJES - EXCURSIONES - HOTELES - RECEPTIVOS - TRASLADO',
+                  textAlign: pw.TextAlign.center,
+                  style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey600)),
+              pw.SizedBox(height: 5),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  franjaBandera(
+                      [PdfColor.fromHex('#75AADB'), PdfColors.white, PdfColor.fromHex('#75AADB')]),
+                  pw.SizedBox(width: 4),
+                  franjaBandera(
+                      [PdfColor.fromHex('#D52B1E'), PdfColors.white, PdfColor.fromHex('#0038A8')]),
+                  pw.SizedBox(width: 4),
+                  banderaBrasil(),
+                ],
+              ),
+            ],
+          ),
         ),
+        pw.SizedBox(height: 8),
       ],
     ),
   );

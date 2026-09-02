@@ -3,7 +3,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../../../shared/utils/firma_cargo.dart';
+import '../../../shared/utils/firma_cargo.dart' show cargoPresidenteAsociacion, cargoSecretario;
 import '../../../shared/utils/numero_en_palabras.dart';
 import '../data/constancia_service.dart';
 
@@ -34,6 +34,10 @@ const _meses = [
 Future<Uint8List> construirPdfConstancia(
   ConstanciaParaImprimir datos, {
   String? nombreAsociacion,
+  // Cofirma opcional del secretario -- solo se imprime si quien generó
+  // el PDF eligió incluirla (no es obligatorio que la organización
+  // tenga secretario, y aunque lo tenga, sigue siendo opcional).
+  String? nombreSecretario,
 }) async {
   final doc = pw.Document();
   final org = datos.organizacion;
@@ -132,7 +136,16 @@ Future<Uint8List> construirPdfConstancia(
           pw.SizedBox(height: 14),
           pw.Text(parrafo2, style: const pw.TextStyle(fontSize: 12), textAlign: pw.TextAlign.justify),
           pw.SizedBox(height: 60),
-          pw.Center(child: bloqueFirma(cargoPresidenteAsociacion(datos.organizacionNombre), nombreAsociacion)),
+          if (nombreSecretario != null && nombreSecretario.isNotEmpty)
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
+              children: [
+                bloqueFirma(cargoPresidenteAsociacion(datos.organizacionNombre), nombreAsociacion),
+                bloqueFirma(cargoSecretario, nombreSecretario),
+              ],
+            )
+          else
+            pw.Center(child: bloqueFirma(cargoPresidenteAsociacion(datos.organizacionNombre), nombreAsociacion)),
         ],
       ),
     ),

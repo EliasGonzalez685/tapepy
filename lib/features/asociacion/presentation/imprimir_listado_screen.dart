@@ -11,6 +11,7 @@ import '../../../shared/models/organizacion_branding.dart';
 import '../../../shared/models/usuario.dart';
 import '../../../shared/models/user_role.dart';
 import '../../../shared/utils/firma_cargo.dart';
+import '../data/secretario_service.dart';
 import '../../firma/data/firma_service.dart';
 import '../data/parada_detalle_service.dart';
 
@@ -133,6 +134,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   final _service = ParadaDetalleService();
   final _firmaService = FirmaService();
   final _brandingService = OrganizacionBrandingService();
+  final _secretarioService = SecretarioService();
   late Future<List<ConductorListadoItem>> _future;
   late final Set<_Columna> _seleccionadas;
   bool _generando = false;
@@ -156,6 +158,12 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   String? _otroPresidenteId;
   String? _otroPresidenteNombre;
   bool _incluirFirmaOtro = true;
+
+  // Cofirma opcional del secretario, si la organización tiene uno --
+  // no depende de la parada elegida, es un cargo de toda la
+  // organización, así que se carga una sola vez.
+  SecretarioActual? _secretario;
+  bool _incluirFirmaSecretario = false;
 
   String get _otroRolLabel =>
       widget.usuario.rol == UserRole.presidenteAsociacion ? 'Presidente de Parada' : 'Presidente de Asociación';
@@ -277,6 +285,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         : _service.cargarListadoConductores(widget.paradaId!);
     _cargarOtroPresidente();
     _cargarOrganizacion();
+    _cargarSecretario();
   }
 
   Future<void> _cargarOrganizacion() async {
@@ -285,6 +294,18 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
     final organizacion = await _brandingService.obtener(organizacionId);
     if (!mounted) return;
     setState(() => _organizacion = organizacion);
+  }
+
+  Future<void> _cargarSecretario() async {
+    final organizacionId = widget.usuario.organizacionId;
+    if (organizacionId == null) return;
+    try {
+      final secretario = await _secretarioService.cargarActual(organizacionId);
+      if (!mounted) return;
+      setState(() => _secretario = secretario);
+    } catch (_) {
+      // Silencioso: si falla, simplemente no se ofrece la cofirma.
+    }
   }
 
   Future<void> _generarPdf({bool compartir = false}) async {
@@ -339,6 +360,8 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
         nombrePropio: _incluirFirmaPropia ? widget.usuario.nombre : null,
         cargoOtro: (_incluirFirmaOtro && _otroPresidenteNombre != null) ? _cargoOtro : null,
         nombreOtro: (_incluirFirmaOtro && _otroPresidenteNombre != null) ? _otroPresidenteNombre : null,
+        cargoSecretario: (_incluirFirmaSecretario && _secretario != null) ? cargoSecretario : null,
+        nombreSecretario: (_incluirFirmaSecretario && _secretario != null) ? _secretario!.nombre : null,
       ),
     ];
   }
@@ -457,6 +480,17 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
                     ? null
                     : (valor) => setState(() => _incluirFirmaOtro = valor),
               ),
+              // Opcional y no obligatorio: solo aparece si la
+              // organización tiene un secretario asignado.
+              if (_secretario != null)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: _incluirFirmaSecretario,
+                  activeColor: _colorAcento,
+                  title: Text('Firma del secretario (${_secretario!.nombre})'),
+                  onChanged: (v) => setState(() => _incluirFirmaSecretario = v ?? false),
+                ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -656,6 +690,8 @@ class _SeccionListado {
   final String? nombrePropio;
   final String? cargoOtro;
   final String? nombreOtro;
+  final String? cargoSecretario;
+  final String? nombreSecretario;
 
   _SeccionListado({
     this.subtitulo,
@@ -664,6 +700,8 @@ class _SeccionListado {
     this.nombrePropio,
     this.cargoOtro,
     this.nombreOtro,
+    this.cargoSecretario,
+    this.nombreSecretario,
   });
 }
 
@@ -850,7 +888,8 @@ Future<Uint8List> _construirPdf({
   // membrete una sola vez, sin repetirlo en las páginas siguientes de
   // esa misma sección.
   for (final seccion in secciones) {
-    final tieneFirmas = seccion.cargoPropio != null || seccion.cargoOtro != null;
+    final tieneFirmas =
+        seccion.cargoPropio != null || seccion.cargoOtro != null || seccion.cargoSecretario != null;
     int? primeraPaginaSeccion;
     doc.addPage(
       pw.MultiPage(
@@ -871,6 +910,8 @@ Future<Uint8List> _construirPdf({
               children: [
                 if (seccion.cargoPropio != null) bloqueFirma(seccion.cargoPropio!, seccion.nombrePropio),
                 if (seccion.cargoOtro != null) bloqueFirma(seccion.cargoOtro!, seccion.nombreOtro),
+                if (seccion.cargoSecretario != null)
+                  bloqueFirma(seccion.cargoSecretario!, seccion.nombreSecretario),
               ],
             ),
           ],

@@ -4,6 +4,7 @@ import 'package:printing/printing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/usuario.dart';
 import '../../../shared/widgets/icon_badge.dart';
+import '../../asociacion/data/secretario_service.dart';
 import '../../constancia/data/constancia_service.dart';
 import '../../constancia/presentation/constancia_pdf.dart';
 import '../../firma/data/firma_service.dart';
@@ -12,7 +13,8 @@ import '../data/conductor_service.dart';
 class _DatosConstancia {
   final ConductorPerfil? perfil;
   final MiSolicitudConstancia? solicitud;
-  _DatosConstancia({this.perfil, this.solicitud});
+  final SecretarioActual? secretario;
+  _DatosConstancia({this.perfil, this.solicitud, this.secretario});
 }
 
 /// Pantalla del conductor para pedir su constancia (documento formal
@@ -32,10 +34,14 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
   final _conductorService = ConductorService();
   final _constanciaService = ConstanciaService();
   final _firmaService = FirmaService();
+  final _secretarioService = SecretarioService();
   late Future<_DatosConstancia> _future;
   bool _solicitando = false;
   bool _generandoPdf = false;
   bool _compartiendoPdf = false;
+  // Cofirma opcional del secretario -- solo aparece si la organización
+  // tiene uno asignado, y no es obligatorio incluirla igual.
+  bool _incluirFirmaSecretario = false;
 
   @override
   void initState() {
@@ -53,9 +59,19 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
       _conductorService.cargarPerfil(usuarioId),
       _constanciaService.cargarMiUltimaSolicitud(usuarioId),
     ]);
+    final perfil = resultados[0] as ConductorPerfil?;
+    SecretarioActual? secretario;
+    if (perfil != null) {
+      try {
+        secretario = await _secretarioService.cargarActual(perfil.organizacionId);
+      } catch (_) {
+        // Silencioso: si falla, simplemente no se ofrece la cofirma.
+      }
+    }
     return _DatosConstancia(
-      perfil: resultados[0] as ConductorPerfil?,
+      perfil: perfil,
       solicitud: resultados[1] as MiSolicitudConstancia?,
+      secretario: secretario,
     );
   }
 
@@ -102,7 +118,17 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
         nombreAsociacion = await _firmaService.cargarNombreUsuario(presidenteId);
       }
 
-      final bytes = await construirPdfConstancia(datos, nombreAsociacion: nombreAsociacion);
+      String? nombreSecretario;
+      if (_incluirFirmaSecretario) {
+        final secretario = await _secretarioService.cargarActual(datos.organizacionId);
+        nombreSecretario = secretario?.nombre;
+      }
+
+      final bytes = await construirPdfConstancia(
+        datos,
+        nombreAsociacion: nombreAsociacion,
+        nombreSecretario: nombreSecretario,
+      );
       await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'constancia.pdf');
     } catch (_) {
       if (!mounted) return;
@@ -124,7 +150,17 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
         nombreAsociacion = await _firmaService.cargarNombreUsuario(presidenteId);
       }
 
-      final bytes = await construirPdfConstancia(datos, nombreAsociacion: nombreAsociacion);
+      String? nombreSecretario;
+      if (_incluirFirmaSecretario) {
+        final secretario = await _secretarioService.cargarActual(datos.organizacionId);
+        nombreSecretario = secretario?.nombre;
+      }
+
+      final bytes = await construirPdfConstancia(
+        datos,
+        nombreAsociacion: nombreAsociacion,
+        nombreSecretario: nombreSecretario,
+      );
       await Printing.sharePdf(bytes: bytes, filename: 'constancia.pdf');
     } catch (_) {
       if (!mounted) return;
@@ -175,6 +211,9 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
                     solicitando: _solicitando,
                     generandoPdf: _generandoPdf,
                     compartiendoPdf: _compartiendoPdf,
+                    secretario: datos.secretario,
+                    incluirFirmaSecretario: _incluirFirmaSecretario,
+                    onCambiarIncluirSecretario: (v) => setState(() => _incluirFirmaSecretario = v),
                     onSolicitar: () => _solicitar(perfil),
                     onImprimir: (id) => _imprimir(id),
                     onCompartir: (id) => _compartir(id),
@@ -193,6 +232,9 @@ class _ContenidoSolicitud extends StatelessWidget {
   final bool solicitando;
   final bool generandoPdf;
   final bool compartiendoPdf;
+  final SecretarioActual? secretario;
+  final bool incluirFirmaSecretario;
+  final ValueChanged<bool> onCambiarIncluirSecretario;
   final VoidCallback onSolicitar;
   final void Function(String solicitudId) onImprimir;
   final void Function(String solicitudId) onCompartir;
@@ -202,6 +244,9 @@ class _ContenidoSolicitud extends StatelessWidget {
     required this.solicitando,
     required this.generandoPdf,
     required this.compartiendoPdf,
+    required this.secretario,
+    required this.incluirFirmaSecretario,
+    required this.onCambiarIncluirSecretario,
     required this.onSolicitar,
     required this.onImprimir,
     required this.onCompartir,
@@ -246,6 +291,17 @@ class _ContenidoSolicitud extends StatelessWidget {
           extra: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Opcional y no obligatorio: solo aparece si la
+              // organización tiene un secretario asignado.
+              if (secretario != null)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: incluirFirmaSecretario,
+                  activeColor: AppTheme.rojoInstitucional,
+                  title: Text('Incluir también la firma del secretario (${secretario!.nombre})'),
+                  onChanged: (v) => onCambiarIncluirSecretario(v ?? false),
+                ),
               OutlinedButton.icon(
                 onPressed: compartiendoPdf ? null : () => onCompartir(solicitud!.id),
                 icon: compartiendoPdf

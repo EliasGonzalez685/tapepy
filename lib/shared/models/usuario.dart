@@ -23,6 +23,11 @@ class Usuario {
   final bool activo;
   final bool cuentaConfirmada;
   final bool enServicio;
+  // Cargo adicional, opcional y por organización (uno solo a la vez):
+  // mientras es true, este usuario tiene los mismos permisos que
+  // presidente_asociacion (ver auth_es_presidente_asociacion() en la
+  // base), sin perder su rol normal ni sus pantallas de siempre.
+  final bool esSecretario;
 
   Usuario({
     required this.id,
@@ -38,6 +43,7 @@ class Usuario {
     required this.activo,
     this.cuentaConfirmada = true,
     this.enServicio = false,
+    this.esSecretario = false,
   });
 
   /// Clon con el/los campos indicados reemplazados. Se usa para que el
@@ -59,6 +65,7 @@ class Usuario {
       activo: activo,
       cuentaConfirmada: cuentaConfirmada,
       enServicio: enServicio,
+      esSecretario: esSecretario,
     );
   }
 
@@ -77,6 +84,7 @@ class Usuario {
       activo: map['activo'] as bool? ?? true,
       cuentaConfirmada: map['cuenta_confirmada'] as bool? ?? true,
       enServicio: map['en_servicio'] as bool? ?? false,
+      esSecretario: map['es_secretario'] as bool? ?? false,
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../../shared/widgets/icon_badge.dart';
 import '../../../shared/widgets/menu_lateral.dart';
 import '../../../shared/data/organizacion_branding_service.dart';
 import '../../../shared/models/organizacion_branding.dart';
+import '../../asociacion/presentation/asociacion_home_screen.dart';
 import '../../auth/data/auth_service.dart';
 import '../../mensajeria/data/mensajeria_service.dart';
 import '../data/conductor_service.dart';
@@ -80,6 +81,21 @@ class _ConductorHomeScreenState extends State<ConductorHomeScreen> {
         usuario: widget.usuario,
         noLeidosFuture: _noLeidosFuture,
         onCerrarSesion: _cerrarSesion,
+        itemsExtra: [
+          if (widget.usuario?.esSecretario == true)
+            ItemMenuLateral(
+              icono: Icons.admin_panel_settings_outlined,
+              titulo: 'Panel de presidente de asociación',
+              onTap: () {
+                final usuario = widget.usuario;
+                Navigator.of(context).pop();
+                if (usuario == null) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => AsociacionHomeScreen(usuario: usuario)),
+                );
+              },
+            ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _refrescar,

@@ -23,6 +23,7 @@ import 'imprimir_listado_screen.dart';
 import 'miembros_activos_screen.dart';
 import 'parada_detalle_screen.dart';
 import 'paradas_screen.dart';
+import 'secretario_screen.dart';
 import 'solicitudes_pendientes_screen.dart';
 import 'vencimientos_carnet_screen.dart';
 
@@ -324,10 +325,10 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
           // Antes había un ítem aparte "Estado de pagos a la
           // plataforma" con el mismo estado de plataforma que ya
           // incluye esta, así que se sacó -- info repetida, un solo
-          // lugar. Solo el presidente real (no cuando el dueño reusa
-          // esta pantalla para supervisar, que ya tiene su propio
-          // acceso).
-          if (widget.usuario?.rol == UserRole.presidenteAsociacion)
+          // lugar. Solo el presidente real o el secretario (no cuando
+          // el dueño reusa esta pantalla para supervisar, que ya tiene
+          // su propio acceso).
+          if (widget.usuario?.rol == UserRole.presidenteAsociacion || widget.usuario?.esSecretario == true)
             ItemMenuLateral(
               icono: Icons.bar_chart_outlined,
               titulo: 'Balance general',
@@ -338,6 +339,23 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
                 if (organizacionId == null) return;
                 navigator.push(
                   MaterialPageRoute(builder: (_) => BalanceGeneralScreen(organizacionId: organizacionId)),
+                );
+              },
+            ),
+          // Exclusivo del presidente real: ni siquiera el secretario
+          // puede nombrar o sacar a otro secretario (pedido explícito
+          // de Elias). El resto de este panel sí es igual para ambos.
+          if (widget.usuario?.rol == UserRole.presidenteAsociacion)
+            ItemMenuLateral(
+              icono: Icons.badge_outlined,
+              titulo: 'Secretario',
+              onTap: () {
+                final organizacionId = widget.usuario?.organizacionId;
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                if (organizacionId == null) return;
+                navigator.push(
+                  MaterialPageRoute(builder: (_) => SecretarioScreen(organizacionId: organizacionId)),
                 );
               },
             ),

@@ -15,6 +15,7 @@ import '../../../shared/widgets/documentos_conductor_sheet.dart';
 import '../../../shared/widgets/vehiculos_conductor_sheet.dart';
 import '../../asociacion/data/parada_detalle_service.dart';
 import '../../asociacion/data/parada_resumen.dart';
+import '../../asociacion/presentation/asociacion_home_screen.dart';
 import '../../asociacion/presentation/balance_general_screen.dart';
 import '../../asociacion/presentation/balance_pagos_screen.dart';
 import '../../asociacion/presentation/cuota_form_widgets.dart';
@@ -445,9 +446,24 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
         usuario: widget.usuario,
         noLeidosFuture: _noLeidosFuture,
         onCerrarSesion: _cerrarSesion,
-        itemsExtra: _parada == null
-            ? []
-            : [
+        itemsExtra: [
+          // Este ítem es independiente de tener o no una parada
+          // asignada: es un cargo aparte, a nivel de toda la
+          // organización, no de una parada puntual.
+          if (widget.usuario?.esSecretario == true)
+            ItemMenuLateral(
+              icono: Icons.admin_panel_settings_outlined,
+              titulo: 'Panel de presidente de asociación',
+              onTap: () {
+                final usuario = widget.usuario;
+                Navigator.of(context).pop();
+                if (usuario == null) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => AsociacionHomeScreen(usuario: usuario)),
+                );
+              },
+            ),
+          if (_parada != null) ...[
                 ItemMenuLateral(
                   icono: Icons.how_to_reg_outlined,
                   titulo: 'Solicitudes pendientes',
@@ -530,7 +546,8 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
                     );
                   },
                 ),
-              ],
+          ],
+        ],
       ),
       floatingActionButton: accion == null
           ? null

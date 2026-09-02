@@ -6,7 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/data/organizacion_service.dart';
+import '../../../shared/data/organizacion_branding_service.dart';
+import '../../../shared/models/organizacion_branding.dart';
 import '../../../shared/models/usuario.dart';
 import '../../../shared/models/user_role.dart';
 import '../../../shared/utils/firma_cargo.dart';
@@ -131,7 +132,7 @@ class ImprimirListadoScreen extends StatefulWidget {
 class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   final _service = ParadaDetalleService();
   final _firmaService = FirmaService();
-  final _organizacionService = OrganizacionService();
+  final _brandingService = OrganizacionBrandingService();
   late Future<List<ConductorListadoItem>> _future;
   late final Set<_Columna> _seleccionadas;
   bool _generando = false;
@@ -147,7 +148,9 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   // de Elias, 2026-08-17). Solo hace falta saber QUIÉN es el otro
   // presidente (id + nombre), no si tiene una firma digital cargada.
   bool _cargandoOtroPresidente = false;
-  String? _organizacionNombre;
+  OrganizacionBranding? _organizacion;
+  String? get _organizacionNombre => _organizacion?.nombre;
+  Color get _colorAcento => _organizacion?.colorPrimario ?? AppTheme.rojoInstitucional;
   bool _incluirFirmaPropia = true;
   String? _paradaIdConsultada; // para no volver a pedir si no cambió el alcance
   String? _otroPresidenteId;
@@ -279,9 +282,9 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
   Future<void> _cargarOrganizacion() async {
     final organizacionId = widget.usuario.organizacionId;
     if (organizacionId == null) return;
-    final nombre = await _organizacionService.cargarNombre(organizacionId);
+    final organizacion = await _brandingService.obtener(organizacionId);
     if (!mounted) return;
-    setState(() => _organizacionNombre = nombre);
+    setState(() => _organizacion = organizacion);
   }
 
   Future<void> _generarPdf({bool compartir = false}) async {
@@ -305,7 +308,11 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
       // último caso no se separe por hoja (ver _modoBulk).
       final secciones = await _construirSeccionUnica(items);
 
-      final bytes = await _construirPdf(secciones: secciones, columnas: columnas);
+      final bytes = await _construirPdf(
+        secciones: secciones,
+        columnas: columnas,
+        organizacion: _organizacion,
+      );
       if (compartir) {
         await Printing.sharePdf(bytes: bytes, filename: 'listado_socios.pdf');
       } else {
@@ -411,8 +418,8 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
                   return FilterChip(
                     label: Text(columna.etiqueta),
                     selected: activa,
-                    selectedColor: AppTheme.rojoInstitucional.withValues(alpha: 0.15),
-                    checkmarkColor: AppTheme.rojoInstitucional,
+                    selectedColor: _colorAcento.withValues(alpha: 0.15),
+                    checkmarkColor: _colorAcento,
                     onSelected: (valor) {
                       setState(() {
                         if (valor) {
@@ -490,7 +497,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
                       return CheckboxListTile(
                         dense: true,
                         value: seleccionados.contains(item),
-                        activeColor: AppTheme.rojoInstitucional,
+                        activeColor: _colorAcento,
                         title: Text(item.nombre),
                         subtitle: Text(
                           [
@@ -515,7 +522,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: (_generando || cantidadSeleccionada == 0) ? null : _generarPdf,
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
+                style: FilledButton.styleFrom(backgroundColor: _colorAcento),
                 icon: _generando
                     ? const SizedBox(
                         width: 18,
@@ -595,7 +602,7 @@ class _SeccionFirmas extends StatelessWidget {
           children: [
             CheckboxListTile(
               value: incluirMiFirma,
-              activeColor: AppTheme.rojoInstitucional,
+              activeColor: _colorAcento,
               title: Text('Mi firma ($miRolLabel)'),
               onChanged: (v) => onCambiarMiFirma(v ?? false),
             ),
@@ -623,7 +630,7 @@ class _SeccionFirmas extends StatelessWidget {
             else
               CheckboxListTile(
                 value: incluirOtraFirma,
-                activeColor: AppTheme.rojoInstitucional,
+                activeColor: _colorAcento,
                 title: Text('Firma del $otroRolLabel'),
                 subtitle: Text(otroPresidenteNombre!),
                 onChanged: onCambiarOtraFirma == null ? null : (v) => onCambiarOtraFirma!(v ?? false),
@@ -676,13 +683,27 @@ class _SeccionListado {
 Future<Uint8List> _construirPdf({
   required List<_SeccionListado> secciones,
   required List<_Columna> columnas,
+  required OrganizacionBranding? organizacion,
 }) async {
   final doc = pw.Document();
-  final rojo = PdfColor.fromHex('#CC0000');
+  // Fallback genérico por si el membrete se pide antes de terminar de
+  // cargar la organización (no debería pasar en el flujo normal, pero
+  // así el PDF no explota).
+  final org = organizacion ??
+      const OrganizacionBranding(
+        id: '',
+        nombre: 'TapePy',
+        nombreCompleto: 'TapePy',
+        tagline: '',
+        logoAsset: 'assets/images/tapepy_logo_blanco.png',
+        colorPrimario: Color(0xFF8B0000),
+      );
+  final rojo = PdfColor.fromHex(
+      '#${org.colorPrimario.value.toRadixString(16).substring(2)}');
   final azul = PdfColor.fromHex('#1B3A8C');
   final formatoFecha = DateFormat('dd/MM/yyyy HH:mm');
 
-  final logoBytes = (await rootBundle.load('assets/images/traude_logo.png')).buffer.asUint8List();
+  final logoBytes = (await rootBundle.load(org.logoAsset)).buffer.asUint8List();
   final logoImage = pw.MemoryImage(logoBytes);
 
   pw.Widget celda(String texto, {bool header = false, bool angosta = false, bool alta = false}) => pw.Padding(
@@ -736,20 +757,25 @@ Future<Uint8List> _construirPdf({
   pw.Widget membrete({required String? subtitulo, required int cantidad}) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          pw.Text('T.R.A.U.D.E.',
+          pw.Text(org.nombre.toUpperCase(),
               style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: rojo, letterSpacing: 3)),
           pw.SizedBox(height: 4),
-          pw.Text(
-            'RECONOCIDO POR EL PODER EJECUTIVO CON PERSONERÍA JURÍDICA DECRETO LEY Nº 12.189',
-            textAlign: pw.TextAlign.center,
-            style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 2),
-          pw.Text('SERVICIO INTERNACIONAL DE VIAJES', style: const pw.TextStyle(fontSize: 10)),
-          pw.Text('PASAJES. EXCURSIONES. HOTELES. RECEPTIVOS Y TRASLADO',
-              style: const pw.TextStyle(fontSize: 7)),
-          pw.SizedBox(height: 2),
-          pw.Text('Cel.: (0993) 501 230', style: const pw.TextStyle(fontSize: 9)),
+          if (org.membreteLegal != null) ...[
+            pw.Text(
+              org.membreteLegal!,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 2),
+          ],
+          if (org.tagline.isNotEmpty)
+            pw.Text(org.tagline.toUpperCase(), style: const pw.TextStyle(fontSize: 10)),
+          if (org.carnetSubtitulo != null)
+            pw.Text(org.carnetSubtitulo!, style: const pw.TextStyle(fontSize: 7)),
+          if (org.telefonoMembrete != null) ...[
+            pw.SizedBox(height: 2),
+            pw.Text('Cel.: ${org.telefonoMembrete}', style: const pw.TextStyle(fontSize: 9)),
+          ],
           pw.SizedBox(height: 8),
           pw.Stack(
             alignment: pw.Alignment.centerLeft,

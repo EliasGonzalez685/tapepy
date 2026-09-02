@@ -10,6 +10,7 @@ import '../../features/superadmin/presentation/superadmin_home_screen.dart';
 import '../../features/plataforma/presentation/dueno_plataforma_home_screen.dart';
 import '../../shared/models/user_role.dart';
 import '../../shared/models/usuario.dart';
+import '../../shared/models/organizacion_branding.dart';
 
 /// Rutas nombradas. A medida que se sumen pantallas del wireframe
 /// (13 pantallas ya diseñadas) se van agregando acá por rol.
@@ -31,7 +32,10 @@ class AppRouter {
   static Map<String, WidgetBuilder> routes = {
     welcome: (_) => const WelcomeScreen(),
     organizacionSelect: (_) => const OrganizacionSelectScreen(),
-    login: (_) => const LoginScreen(),
+    login: (context) => LoginScreen(
+          organizacion: ModalRoute.of(context)!.settings.arguments
+              as OrganizacionBranding?,
+        ),
     registro: (_) => const RegistroScreen(),
     conductorHome: (context) => ConductorHomeScreen(
           usuario: ModalRoute.of(context)!.settings.arguments as Usuario?,

@@ -2,9 +2,16 @@ import 'package:flutter/material.dart';
 import '../data/auth_service.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/organizacion_branding.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  // Organización elegida en la pantalla anterior (selección de
+  // organización). Puede venir null si se llega acá por otra vía (ej.
+  // deep link) — en ese caso se muestra solo el logo de TapePy, sin
+  // asumir ninguna organización puntual.
+  final OrganizacionBranding? organizacion;
+
+  const LoginScreen({super.key, this.organizacion});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -74,6 +81,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final organizacion = widget.organizacion;
+    final colorAcento = organizacion?.colorPrimario ?? AppTheme.rojoInstitucional;
     return Scaffold(
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
@@ -88,9 +97,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // TapePy (plataforma) + Traude (organización elegida),
+                    // TapePy (plataforma) + logo de la organización elegida,
                     // uno al lado del otro — deja claro con qué cuenta se
-                    // está entrando.
+                    // está entrando. Si no se sabe la organización (llegó
+                    // por otra vía), se muestra solo el de TapePy.
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -102,34 +112,36 @@ class _LoginScreenState extends State<LoginScreen> {
                             fit: BoxFit.cover,
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child:
-                              Icon(Icons.close, size: 20, color: Colors.grey),
-                        ),
-                        ClipOval(
-                          child: Image.asset(
-                            'assets/images/traude_logo.png',
-                            width: 100,
-                            height: 100,
-                            fit: BoxFit.cover,
+                        if (organizacion != null) ...[
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Icon(Icons.close,
+                                size: 20, color: Colors.grey),
                           ),
-                        ),
+                          ClipOval(
+                            child: Image.asset(
+                              organizacion.logoAsset,
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Bienvenido a la Asociación Traude',
+                      organizacion != null
+                          ? 'Bienvenido a ${organizacion.nombre}'
+                          : 'Ingresá a tu cuenta',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 20),
-                    // Silueta de furgón — refuerza visualmente "transporte
-                    // alternativo" en la pantalla de entrada.
                     Icon(
-                      Icons.airport_shuttle,
+                      Icons.badge_outlined,
                       size: 72,
-                      color: AppTheme.rojoInstitucional.withValues(alpha: 0.85),
+                      color: colorAcento.withValues(alpha: 0.85),
                     ),
                     const SizedBox(height: 24),
                     TextFormField(
@@ -189,6 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 24),
                     FilledButton(
                       onPressed: _loading ? null : _submit,
+                      style: FilledButton.styleFrom(backgroundColor: colorAcento),
                       child: _loading
                           ? const SizedBox(
                               height: 20,

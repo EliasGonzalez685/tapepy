@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import '../../../core/theme/app_theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/config/supabase_config.dart';
+import '../../../shared/models/organizacion_branding.dart';
 import '../data/balance_pagos.dart';
 import '../data/parada_detalle_service.dart';
 
@@ -49,21 +51,44 @@ class _BalancePagosScreenState extends State<BalancePagosScreen> {
   late Future<BalancePagosParada> _future;
   bool _generandoPdf = false;
   bool _compartiendoPdf = false;
+  OrganizacionBranding? _organizacion;
 
   @override
   void initState() {
     super.initState();
     _cargar();
+    _cargarOrganizacion();
   }
 
   void _cargar() {
     _future = widget.service.cargarCuotasParaBalance(widget.paradaId).then(calcularBalancePagos);
   }
 
+  /// La parada ya sabe a qué organización pertenece — se pide así en
+  /// vez de agregar un parámetro más al widget, para no tener que tocar
+  /// los dos lugares desde donde se abre esta pantalla.
+  Future<void> _cargarOrganizacion() async {
+    try {
+      final row = await SupabaseConfig.client
+          .from('paradas')
+          .select('organizaciones(id, nombre, nombre_completo, tagline, '
+              'logo_asset, color_primario, carnet_subtitulo, '
+              'mostrar_banderas_frontera, membrete_legal, telefono_membrete)')
+          .eq('id', widget.paradaId)
+          .single();
+      final organizacionMap = row['organizaciones'] as Map<String, dynamic>?;
+      if (organizacionMap == null || !mounted) return;
+      setState(() => _organizacion = OrganizacionBranding.fromMap(organizacionMap));
+    } on PostgrestException {
+      // Si falla, el PDF se genera igual con el membrete genérico.
+    }
+  }
+
   Future<void> _generarPdf(BalancePagosParada balance) async {
     setState(() => _generandoPdf = true);
     try {
-      final bytes = await _construirPdfBalance(paradaNombre: widget.paradaNombre, balance: balance);
+      final bytes = await _construirPdfBalance(
+          paradaNombre: widget.paradaNombre, balance: balance, organizacion: _organizacion);
       await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'balance_pagos.pdf');
     } catch (_) {
       if (!mounted) return;
@@ -77,7 +102,8 @@ class _BalancePagosScreenState extends State<BalancePagosScreen> {
   Future<void> _compartirPdf(BalancePagosParada balance) async {
     setState(() => _compartiendoPdf = true);
     try {
-      final bytes = await _construirPdfBalance(paradaNombre: widget.paradaNombre, balance: balance);
+      final bytes = await _construirPdfBalance(
+          paradaNombre: widget.paradaNombre, balance: balance, organizacion: _organizacion);
       await Printing.sharePdf(bytes: bytes, filename: 'balance_pagos.pdf');
     } catch (_) {
       if (!mounted) return;
@@ -371,20 +397,31 @@ class _TablaPorConductor extends StatelessWidget {
 Future<Uint8List> _construirPdfBalance({
   required String paradaNombre,
   required BalancePagosParada balance,
+  required OrganizacionBranding? organizacion,
 }) async {
   final doc = pw.Document();
-  final rojo = PdfColor.fromHex('#CC0000');
+  final org = organizacion ??
+      const OrganizacionBranding(
+        id: '',
+        nombre: 'TapePy',
+        nombreCompleto: 'TapePy',
+        tagline: '',
+        logoAsset: 'assets/images/tapepy_logo_blanco.png',
+        colorPrimario: Color(0xFF8B0000),
+      );
+  final rojo = PdfColor.fromHex(
+      '#${org.colorPrimario.value.toRadixString(16).substring(2)}');
   final azul = PdfColor.fromHex('#1B3A8C');
   final formatoFecha = DateFormat('dd/MM/yyyy HH:mm');
   final formatoMonto = NumberFormat.decimalPattern('es');
 
-  final logoBytes = (await rootBundle.load('assets/images/traude_logo.png')).buffer.asUint8List();
+  final logoBytes = (await rootBundle.load(org.logoAsset)).buffer.asUint8List();
   final logoImage = pw.MemoryImage(logoBytes);
 
   pw.Widget membrete() => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          pw.Text('T.R.A.U.D.E.',
+          pw.Text(org.nombre.toUpperCase(),
               style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: rojo, letterSpacing: 3)),
           pw.SizedBox(height: 8),
           pw.Stack(

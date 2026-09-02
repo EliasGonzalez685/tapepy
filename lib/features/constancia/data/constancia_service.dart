@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart' show Color;
 import '../../../core/config/supabase_config.dart';
+import '../../../shared/models/organizacion_branding.dart';
 
 /// Solicitud de constancia vista por el conductor que la pidió: solo
 /// necesita saber en qué estado está y, si ya fue aprobada, con qué
@@ -71,15 +73,17 @@ class ConstanciaParaImprimir {
   final String tipoSocio;
   final String paradaNombre;
   final String organizacionId;
-  final String organizacionNombre;
+  final OrganizacionBranding organizacion;
   final DateTime fecha;
+
+  String get organizacionNombre => organizacion.nombre;
 
   ConstanciaParaImprimir({
     required this.nombre,
     required this.tipoSocio,
     required this.paradaNombre,
     required this.organizacionId,
-    required this.organizacionNombre,
+    required this.organizacion,
     required this.fecha,
     this.cedula,
   });
@@ -119,13 +123,26 @@ class ConstanciaService {
   Future<ConstanciaParaImprimir> cargarParaImprimir(String solicitudId) async {
     final row = await _client
         .from('solicitudes_constancia')
-        .select(
-            'tipo_socio, creado_en, resuelto_en, organizacion_id, paradas(nombre), organizaciones(nombre), usuarios!solicitudes_constancia_solicitante_id_fkey(nombre, cedula)')
+        .select('tipo_socio, creado_en, resuelto_en, organizacion_id, '
+            'paradas(nombre), organizaciones(id, nombre, nombre_completo, '
+            'tagline, logo_asset, color_primario, carnet_subtitulo, '
+            'mostrar_banderas_frontera, membrete_legal, telefono_membrete), '
+            'usuarios!solicitudes_constancia_solicitante_id_fkey(nombre, cedula)')
         .eq('id', solicitudId)
         .single();
     final usuario = row['usuarios'] as Map<String, dynamic>;
     final parada = row['paradas'] as Map<String, dynamic>?;
-    final organizacion = row['organizaciones'] as Map<String, dynamic>?;
+    final organizacionMap = row['organizaciones'] as Map<String, dynamic>?;
+    final organizacion = organizacionMap != null
+        ? OrganizacionBranding.fromMap(organizacionMap)
+        : const OrganizacionBranding(
+            id: '',
+            nombre: 'TapePy',
+            nombreCompleto: 'TapePy',
+            tagline: '',
+            logoAsset: 'assets/images/tapepy_logo_blanco.png',
+            colorPrimario: Color(0xFF8B0000),
+          );
     final resueltoEn = row['resuelto_en'] as String?;
     return ConstanciaParaImprimir(
       nombre: usuario['nombre'] as String? ?? 'Sin nombre',
@@ -133,7 +150,7 @@ class ConstanciaService {
       tipoSocio: row['tipo_socio'] as String? ?? 'chofer',
       paradaNombre: parada?['nombre'] as String? ?? '',
       organizacionId: row['organizacion_id'] as String,
-      organizacionNombre: organizacion?['nombre'] as String? ?? 'TRAUDE',
+      organizacion: organizacion,
       fecha: resueltoEn != null ? DateTime.parse(resueltoEn) : DateTime.parse(row['creado_en'] as String),
     );
   }

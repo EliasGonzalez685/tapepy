@@ -5,7 +5,8 @@ import '../../../shared/models/usuario.dart';
 import '../../../shared/widgets/en_servicio_switch.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../../../shared/widgets/menu_lateral.dart';
-import '../../../shared/data/organizacion_service.dart';
+import '../../../shared/data/organizacion_branding_service.dart';
+import '../../../shared/models/organizacion_branding.dart';
 import '../../auth/data/auth_service.dart';
 import '../../mensajeria/data/mensajeria_service.dart';
 import '../data/conductor_service.dart';
@@ -26,10 +27,12 @@ class ConductorHomeScreen extends StatefulWidget {
 class _ConductorHomeScreenState extends State<ConductorHomeScreen> {
   final _service = ConductorService();
   final _mensajeriaService = MensajeriaService();
-  final _organizacionService = OrganizacionService();
+  final _brandingService = OrganizacionBrandingService();
   late Future<ConductorPerfil?> _future;
   late Future<int> _noLeidosFuture;
-  String? _organizacionNombre;
+  OrganizacionBranding? _organizacion;
+
+  String? get _organizacionNombre => _organizacion?.nombre;
 
   @override
   void initState() {
@@ -48,11 +51,12 @@ class _ConductorHomeScreenState extends State<ConductorHomeScreen> {
     final organizacionId = widget.usuario?.organizacionId;
     if (organizacionId == null) return;
     try {
-      final nombre = await _organizacionService.cargarNombre(organizacionId);
+      final organizacion = await _brandingService.obtener(organizacionId);
       if (!mounted) return;
-      setState(() => _organizacionNombre = nombre);
+      setState(() => _organizacion = organizacion);
     } catch (_) {
-      // Silencioso: si falla, el AppBar se queda con el nombre por defecto.
+      // Silencioso: si falla, el AppBar y el encabezado se quedan con
+      // los valores por defecto (nombre TapePy, rojo institucional).
     }
   }
 
@@ -89,7 +93,11 @@ class _ConductorHomeScreenState extends State<ConductorHomeScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _SaludoConductor(usuario: widget.usuario, parada: perfil?.paradaNombre),
+                _SaludoConductor(
+                  usuario: widget.usuario,
+                  parada: perfil?.paradaNombre,
+                  color: _organizacion?.colorPrimario ?? AppTheme.rojoInstitucional,
+                ),
                 const SizedBox(height: 24),
                 if (perfil == null)
                   const _SinAsignar()
@@ -139,7 +147,8 @@ class _ConductorHomeScreenState extends State<ConductorHomeScreen> {
 class _SaludoConductor extends StatelessWidget {
   final Usuario? usuario;
   final String? parada;
-  const _SaludoConductor({required this.usuario, required this.parada});
+  final Color color;
+  const _SaludoConductor({required this.usuario, required this.parada, required this.color});
 
   String get _saludo {
     final hora = DateTime.now().hour;
@@ -159,7 +168,7 @@ class _SaludoConductor extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppTheme.rojoInstitucional, AppTheme.rojoInstitucional.withValues(alpha: 0.82)],
+          colors: [color, color.withValues(alpha: 0.82)],
         ),
         borderRadius: BorderRadius.circular(20),
       ),
@@ -175,8 +184,7 @@ class _SaludoConductor extends StatelessWidget {
                     usuario?.fotoPerfilUrl != null ? NetworkImage(usuario!.fotoPerfilUrl!) : null,
                 child: usuario?.fotoPerfilUrl == null
                     ? Text(inicial,
-                        style: const TextStyle(
-                            color: AppTheme.rojoInstitucional, fontWeight: FontWeight.bold, fontSize: 20))
+                        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20))
                     : null,
               ),
               const SizedBox(width: 14),

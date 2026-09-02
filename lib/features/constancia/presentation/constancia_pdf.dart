@@ -36,17 +36,19 @@ Future<Uint8List> construirPdfConstancia(
   String? nombreAsociacion,
 }) async {
   final doc = pw.Document();
-  final rojo = PdfColor.fromHex('#CC0000');
+  final org = datos.organizacion;
+  final rojo = PdfColor.fromHex(
+      '#${org.colorPrimario.value.toRadixString(16).substring(2)}');
   final azul = PdfColor.fromHex('#1B3A8C');
   final formatoFechaGeneracion = DateFormat('dd/MM/yyyy HH:mm');
 
-  final logoBytes = (await rootBundle.load('assets/images/traude_logo.png')).buffer.asUint8List();
+  final logoBytes = (await rootBundle.load(org.logoAsset)).buffer.asUint8List();
   final logoImage = pw.MemoryImage(logoBytes);
 
   pw.Widget membrete() => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          pw.Text('T.R.A.U.D.E.',
+          pw.Text(org.nombre.toUpperCase(),
               style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: rojo, letterSpacing: 3)),
           pw.SizedBox(height: 8),
           pw.Stack(

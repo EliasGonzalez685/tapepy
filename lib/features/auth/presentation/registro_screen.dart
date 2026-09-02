@@ -24,6 +24,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
   final _passwordController = TextEditingController();
   final _confirmarController = TextEditingController();
 
+  List<OrganizacionOpcion> _organizaciones = [];
   String? _organizacionId;
   List<ParadaOpcion> _paradas = [];
   String? _paradaId;
@@ -40,8 +41,11 @@ class _RegistroScreenState extends State<RegistroScreen> {
     _inicializar();
   }
 
-  /// Hoy hay una sola organización (Traude), así que no hace falta
-  /// mostrar un selector: se resuelve sola y se cargan sus paradas.
+  /// Si hay una sola organización activa se resuelve sola (sin mostrar
+  /// selector) y se cargan sus paradas. Si hay más de una (ej. Traude
+  /// + FETACE), se muestra un selector para que cada quien elija la
+  /// suya — evita que alguien quede registrado en la organización
+  /// equivocada.
   Future<void> _inicializar() async {
     try {
       final organizaciones = await _registroService.cargarOrganizaciones();
@@ -49,10 +53,11 @@ class _RegistroScreenState extends State<RegistroScreen> {
       if (organizaciones.isEmpty) {
         setState(() {
           _cargandoParadas = false;
-          _error = 'No hay paradas disponibles todavía.';
+          _error = 'No hay organizaciones disponibles todavía.';
         });
         return;
       }
+      setState(() => _organizaciones = organizaciones);
       await _alElegirOrganizacion(organizaciones.first.id);
     } catch (_) {
       if (!mounted) return;
@@ -173,13 +178,32 @@ class _RegistroScreenState extends State<RegistroScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Registrate con tus datos y elegí tu parada.',
+                      _organizaciones.length > 1
+                          ? 'Registrate con tus datos y elegí tu organización y tu parada.'
+                          : 'Registrate con tus datos y elegí tu parada.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                     ),
                     const SizedBox(height: 24),
+                    if (_organizaciones.length > 1) ...[
+                      DropdownButtonFormField<String>(
+                        value: _organizacionId,
+                        decoration: const InputDecoration(
+                          labelText: 'Organización',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _organizaciones
+                            .map((o) => DropdownMenuItem(
+                                value: o.id, child: Text(o.nombre)))
+                            .toList(),
+                        onChanged: (value) => _alElegirOrganizacion(value),
+                        validator: (value) =>
+                            value == null ? 'Elegí tu organización' : null,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     DropdownButtonFormField<String>(
                       value: _paradaId,
                       decoration: InputDecoration(

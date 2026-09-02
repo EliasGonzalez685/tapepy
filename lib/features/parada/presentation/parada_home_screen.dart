@@ -3,7 +3,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/data/organizacion_service.dart';
+import '../../../shared/data/organizacion_branding_service.dart';
+import '../../../shared/models/organizacion_branding.dart';
 import '../../../shared/models/usuario.dart';
 import '../../../shared/widgets/badge_en_servicio.dart';
 import '../../../shared/widgets/en_servicio_switch.dart';
@@ -55,14 +56,16 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
   final _lotePagoService = LotePagoService();
   final _mensajeriaService = MensajeriaService();
   final _firmaService = FirmaService();
-  final _organizacionService = OrganizacionService();
+  final _brandingService = OrganizacionBrandingService();
 
   _Seccion _seccion = _Seccion.conductores;
   bool _cargandoParada = true;
   MiParadaInfo? _parada;
   int? _solicitudesPendientesCount;
   int? _solicitudesFirmaCount;
-  String? _organizacionNombre;
+  OrganizacionBranding? _organizacion;
+
+  String? get _organizacionNombre => _organizacion?.nombre;
 
   int get _totalSolicitudesPendientes =>
       (_solicitudesPendientesCount ?? 0) + (_solicitudesFirmaCount ?? 0);
@@ -87,11 +90,12 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
     final organizacionId = widget.usuario?.organizacionId;
     if (organizacionId == null) return;
     try {
-      final nombre = await _organizacionService.cargarNombre(organizacionId);
+      final organizacion = await _brandingService.obtener(organizacionId);
       if (!mounted) return;
-      setState(() => _organizacionNombre = nombre);
+      setState(() => _organizacion = organizacion);
     } catch (_) {
-      // Silencioso: si falla, el AppBar se queda con el nombre por defecto.
+      // Silencioso: si falla, el AppBar y el encabezado se quedan con
+      // los valores por defecto (nombre TapePy, rojo institucional).
     }
   }
 
@@ -546,7 +550,10 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
                 padding: const EdgeInsets.all(16),
                 children: _parada == null
                     ? [
-                        _SaludoPresidenteParada(usuario: widget.usuario),
+                        _SaludoPresidenteParada(
+                          usuario: widget.usuario,
+                          color: _organizacion?.colorPrimario ?? AppTheme.rojoInstitucional,
+                        ),
                         const SizedBox(height: 24),
                         const _SinParadaAsignada(),
                       ]
@@ -559,6 +566,7 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
                             resumen: snapshot.data,
                             solicitudesPendientes: _totalSolicitudesPendientes,
                             usuario: widget.usuario,
+                            color: _organizacion?.colorPrimario ?? AppTheme.rojoInstitucional,
                           ),
                         ),
                         const SizedBox(height: 18),
@@ -644,7 +652,8 @@ class _ParadaHomeScreenState extends State<ParadaHomeScreen> {
 
 class _SaludoPresidenteParada extends StatelessWidget {
   final Usuario? usuario;
-  const _SaludoPresidenteParada({required this.usuario});
+  final Color color;
+  const _SaludoPresidenteParada({required this.usuario, required this.color});
 
   String get _saludo {
     final hora = DateTime.now().hour;
@@ -663,7 +672,7 @@ class _SaludoPresidenteParada extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppTheme.rojoInstitucional, AppTheme.rojoInstitucional.withValues(alpha: 0.82)],
+          colors: [color, color.withValues(alpha: 0.82)],
         ),
         borderRadius: BorderRadius.circular(20),
       ),
@@ -679,8 +688,7 @@ class _SaludoPresidenteParada extends StatelessWidget {
                     usuario?.fotoPerfilUrl != null ? NetworkImage(usuario!.fotoPerfilUrl!) : null,
                 child: usuario?.fotoPerfilUrl == null
                     ? Text(inicial,
-                        style: const TextStyle(
-                            color: AppTheme.rojoInstitucional, fontWeight: FontWeight.bold, fontSize: 20))
+                        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20))
                     : null,
               ),
               const SizedBox(width: 14),
@@ -753,12 +761,14 @@ class _EncabezadoMiParada extends StatelessWidget {
   final ParadaResumen? resumen;
   final int solicitudesPendientes;
   final Usuario? usuario;
+  final Color color;
   const _EncabezadoMiParada({
     required this.nombre,
     this.ubicacion,
     this.resumen,
     this.solicitudesPendientes = 0,
     this.usuario,
+    required this.color,
   });
 
   static String get _saludo {
@@ -778,7 +788,7 @@ class _EncabezadoMiParada extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppTheme.rojoInstitucional, AppTheme.rojoInstitucional.withValues(alpha: 0.82)],
+          colors: [color, color.withValues(alpha: 0.82)],
         ),
         borderRadius: BorderRadius.circular(20),
       ),

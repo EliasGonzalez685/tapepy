@@ -12,7 +12,8 @@ import '../data/perfil_service.dart';
 /// aparte de poder compartir el PDF completo del carnet.
 Future<Uint8List> generarPdfQr(CarnetData datos) async {
   final doc = pw.Document();
-  final rojo = PdfColor.fromHex('#8B0000');
+  final colorOrg = PdfColor.fromHex(
+      '#${datos.organizacion.colorPrimario.value.toRadixString(16).substring(2)}');
 
   doc.addPage(
     pw.Page(
@@ -22,8 +23,12 @@ Future<Uint8List> generarPdfQr(CarnetData datos) async {
         return pw.Column(
           mainAxisAlignment: pw.MainAxisAlignment.center,
           children: [
-            pw.Text('T.R.A.U.D.E.',
-                style: pw.TextStyle(color: rojo, fontWeight: pw.FontWeight.bold, fontSize: 15, letterSpacing: 1.5)),
+            pw.Text(datos.organizacion.nombre.toUpperCase(),
+                style: pw.TextStyle(
+                    color: colorOrg,
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 15,
+                    letterSpacing: 1.5)),
             pw.SizedBox(height: 16),
             pw.BarcodeWidget(
               barcode: pw.Barcode.qrCode(),

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/data/organizacion_service.dart';
+import '../../../shared/data/organizacion_branding_service.dart';
+import '../../../shared/models/organizacion_branding.dart';
 import '../../../shared/models/user_role.dart';
 import '../../../shared/models/usuario.dart';
 import '../../../shared/widgets/en_servicio_switch.dart';
@@ -50,14 +51,15 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
   final _paradaDetalleService = ParadaDetalleService();
   final _firmaService = FirmaService();
   final _constanciaService = ConstanciaService();
-  final _organizacionService = OrganizacionService();
+  final _brandingService = OrganizacionBrandingService();
   late Future<AsociacionDashboardTotales> _future;
   late Future<int> _noLeidosFuture;
   int? _solicitudesPendientesCount;
   int? _solicitudesFirmaCount;
   int? _solicitudesConstanciaCount;
   int? _noLeidosCount;
-  String? _organizacionNombre;
+  OrganizacionBranding? _organizacion;
+  String? get _organizacionNombre => _organizacion?.nombre;
 
   int get _totalSolicitudesPendientes =>
       (_solicitudesPendientesCount ?? 0) + (_solicitudesFirmaCount ?? 0) + (_solicitudesConstanciaCount ?? 0);
@@ -84,9 +86,9 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
     final organizacionId = widget.usuario?.organizacionId;
     if (organizacionId == null) return;
     try {
-      final nombre = await _organizacionService.cargarNombre(organizacionId);
+      final organizacion = await _brandingService.obtener(organizacionId);
       if (!mounted) return;
-      setState(() => _organizacionNombre = nombre);
+      setState(() => _organizacion = organizacion);
     } catch (_) {
       // Silencioso: si falla, el AppBar se queda con el nombre por defecto.
     }
@@ -415,6 +417,8 @@ class _GreetingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final nombre = usuario?.nombre ?? 'Presidente';
     final inicial = nombre.trim().isNotEmpty ? nombre.trim()[0].toUpperCase() : 'P';
+    final colorOrg = _organizacion?.colorPrimario ?? AppTheme.rojoInstitucional;
+    final logoOrg = _organizacion?.logoAsset ?? 'assets/images/traude_logo.png';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -423,8 +427,8 @@ class _GreetingHeader extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.rojoInstitucional,
-            AppTheme.rojoInstitucional.withValues(alpha: 0.82),
+            colorOrg,
+            colorOrg.withValues(alpha: 0.82),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
@@ -434,19 +438,19 @@ class _GreetingHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Logo real de Traude (la organización). El saludo de al
-              // lado usa el nombre de la persona logueada — son cosas
-              // distintas.
+              // Logo real de la organización del usuario logueado
+              // (Traude, FETACE, etc.). El saludo de al lado usa el
+              // nombre de la persona — son cosas distintas.
               CircleAvatar(
                 radius: 26,
                 backgroundColor: Colors.white,
-                backgroundImage: const AssetImage('assets/images/traude_logo.png'),
+                backgroundImage: AssetImage(logoOrg),
                 onBackgroundImageError: (_, __) {},
                 child: usuario == null
                     ? Text(
                         inicial,
-                        style: const TextStyle(
-                          color: AppTheme.rojoInstitucional,
+                        style: TextStyle(
+                          color: colorOrg,
                           fontWeight: FontWeight.bold,
                           fontSize: 20,
                         ),

@@ -9,13 +9,14 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/config/supabase_config.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/organizacion_branding.dart';
 import '../data/perfil_service.dart';
 import 'qr_pdf.dart';
 
 /// Carnet digital del socio: vertical, frente y reverso (se toca la
-/// tarjeta para dar vuelta). Muestra la organización (Traude), no la
-/// marca TapePy. El QR codifica la URL pública de verificación (Edge
+/// tarjeta para dar vuelta). Muestra la organización real del socio
+/// (Traude, FETACE, etc., vía datos.organizacion), no la marca TapePy.
+/// El QR codifica la URL pública de verificación (Edge
 /// Function `verificar-carnet`), así que cualquier lector de QR lo abre
 /// directo y muestra nombre/foto/cédula/organización si el carnet está
 /// vigente.
@@ -110,7 +111,8 @@ class _CarnetScreenState extends State<CarnetScreen> {
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: _generandoPdf ? null : () => _descargarPdf(datos),
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.rojoInstitucional),
+                style: FilledButton.styleFrom(
+                    backgroundColor: datos.organizacion.colorPrimario),
                 icon: _generandoPdf
                     ? const SizedBox(
                         width: 18,
@@ -252,11 +254,12 @@ class _MarcoCarnet extends StatelessWidget {
 }
 
 /// Membrete institucional (mismo lenguaje visual que el encabezado de
-/// los listados imprimibles): wordmark en rojo, franja bandera con el
-/// logo circular superpuesto. Versión compacta para que entre en el
-/// ancho angosto del carnet.
+/// los listados imprimibles): wordmark en el color de la organización,
+/// franja bandera con el logo circular superpuesto. Versión compacta
+/// para que entre en el ancho angosto del carnet.
 class _EncabezadoOrganizacion extends StatelessWidget {
-  const _EncabezadoOrganizacion();
+  final OrganizacionBranding organizacion;
+  const _EncabezadoOrganizacion({required this.organizacion});
 
   static const _azulInstitucional = Color(0xFF1B3A8C);
 
@@ -268,10 +271,10 @@ class _EncabezadoOrganizacion extends StatelessWidget {
       padding: const EdgeInsets.only(top: 12, bottom: 10),
       child: Column(
         children: [
-          const Text(
-            'T.R.A.U.D.E.',
+          Text(
+            organizacion.nombre.toUpperCase(),
             style: TextStyle(
-              color: AppTheme.rojoInstitucional,
+              color: organizacion.colorPrimario,
               fontWeight: FontWeight.bold,
               fontSize: 19,
               letterSpacing: 2,
@@ -285,7 +288,7 @@ class _EncabezadoOrganizacion extends StatelessWidget {
               children: [
                 Column(
                   children: [
-                    Expanded(child: Container(color: AppTheme.rojoInstitucional)),
+                    Expanded(child: Container(color: organizacion.colorPrimario)),
                     Expanded(child: Container(color: Colors.white)),
                     Expanded(child: Container(color: _azulInstitucional)),
                   ],
@@ -295,9 +298,9 @@ class _EncabezadoOrganizacion extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(2),
                     decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                    child: const ClipOval(
+                    child: ClipOval(
                       child: Image(
-                        image: AssetImage('assets/images/traude_logo.png'),
+                        image: AssetImage(organizacion.logoAsset),
                         width: 24,
                         height: 24,
                         fit: BoxFit.cover,
@@ -323,18 +326,19 @@ class _CaraFrente extends StatelessWidget {
     final inicial = datos.nombre.trim().isNotEmpty ? datos.nombre.trim()[0].toUpperCase() : '?';
     final formatoFecha = DateFormat('dd/MM/yy');
 
+    final color = datos.organizacion.colorPrimario;
     return _MarcoCarnet(
       child: Column(
         children: [
-          const _EncabezadoOrganizacion(),
+          _EncabezadoOrganizacion(organizacion: datos.organizacion),
           const SizedBox(height: 12),
           Container(
             width: 128,
             height: 128,
             decoration: BoxDecoration(
-              color: AppTheme.rojoInstitucional.withValues(alpha: 0.15),
+              color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.rojoInstitucional.withValues(alpha: 0.25), width: 1.5),
+              border: Border.all(color: color.withValues(alpha: 0.25), width: 1.5),
               image: datos.fotoPerfilUrl != null
                   ? DecorationImage(image: NetworkImage(datos.fotoPerfilUrl!), fit: BoxFit.cover)
                   : null,
@@ -342,8 +346,7 @@ class _CaraFrente extends StatelessWidget {
             alignment: Alignment.center,
             child: datos.fotoPerfilUrl == null
                 ? Text(inicial,
-                    style: const TextStyle(
-                        color: AppTheme.rojoInstitucional, fontSize: 42, fontWeight: FontWeight.bold))
+                    style: TextStyle(color: color, fontSize: 42, fontWeight: FontWeight.bold))
                 : null,
           ),
           const SizedBox(height: 8),
@@ -378,12 +381,11 @@ class _CaraFrente extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 8),
-            color: AppTheme.rojoInstitucional.withValues(alpha: 0.08),
+            color: color.withValues(alpha: 0.08),
             child: Text(
               'Válido ${formatoFecha.format(datos.emision)} – ${formatoFecha.format(datos.vencimiento)}',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.rojoInstitucional),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
             ),
           ),
         ],
@@ -401,7 +403,7 @@ class _CaraReverso extends StatelessWidget {
     return _MarcoCarnet(
       child: Column(
         children: [
-          const _EncabezadoOrganizacion(),
+          _EncabezadoOrganizacion(organizacion: datos.organizacion),
           const Spacer(),
           QrImageView(
             data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
@@ -422,7 +424,7 @@ class _CaraReverso extends StatelessWidget {
             child: Column(
               children: [
                 Text(
-                  'SERVICIO INTERNACIONAL DE VIAJES',
+                  datos.organizacion.tagline.toUpperCase(),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 10,
@@ -431,14 +433,18 @@ class _CaraReverso extends StatelessWidget {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  'PASAJES · EXCURSIONES · HOTELES · RECEPTIVOS · TRASLADO',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 8, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 6),
-                const _FilaBanderas(),
+                if (datos.organizacion.carnetSubtitulo != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    datos.organizacion.carnetSubtitulo!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 8, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ],
+                if (datos.organizacion.mostrarBanderasFrontera) ...[
+                  const SizedBox(height: 6),
+                  const _FilaBanderas(),
+                ],
               ],
             ),
           ),
@@ -551,7 +557,9 @@ const _pageMarginMm = 5.0;
 
 Future<Uint8List> _generarPdf(CarnetData datos) async {
   final doc = pw.Document();
-  final rojo = PdfColor.fromHex('#8B0000');
+  final organizacion = datos.organizacion;
+  final colorOrg = PdfColor.fromHex(
+      '#${organizacion.colorPrimario.value.toRadixString(16).substring(2)}');
   final azul = PdfColor.fromHex('#1B3A8C');
 
   final pageFormat = PdfPageFormat(
@@ -560,7 +568,7 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
     marginAll: _pageMarginMm * PdfPageFormat.mm,
   );
 
-  final logoBytes = (await rootBundle.load('assets/images/traude_logo.png')).buffer.asUint8List();
+  final logoBytes = (await rootBundle.load(organizacion.logoAsset)).buffer.asUint8List();
   final logoImage = pw.MemoryImage(logoBytes);
 
   pw.MemoryImage? fotoImage;
@@ -576,17 +584,17 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
   }
 
   // Mismo membrete que las listas imprimibles (ver imprimir_listado_screen.dart),
-  // en versión compacta: wordmark en rojo + franja bandera con el logo
-  // circular superpuesto.
+  // en versión compacta: wordmark en el color de la organización + franja
+  // bandera con el logo circular superpuesto.
   pw.Widget encabezado() => pw.Container(
         width: double.infinity,
         color: PdfColors.white,
         padding: const pw.EdgeInsets.only(top: 8, bottom: 6),
         child: pw.Column(
           children: [
-            pw.Text('T.R.A.U.D.E.',
+            pw.Text(organizacion.nombre.toUpperCase(),
                 style: pw.TextStyle(
-                  color: rojo,
+                  color: colorOrg,
                   fontWeight: pw.FontWeight.bold,
                   fontSize: 13,
                   letterSpacing: 1.5,
@@ -600,7 +608,7 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
                 children: [
                   pw.Column(
                     children: [
-                      pw.Expanded(child: pw.Container(color: rojo)),
+                      pw.Expanded(child: pw.Container(color: colorOrg)),
                       pw.Expanded(child: pw.Container(color: PdfColors.white)),
                       pw.Expanded(child: pw.Container(color: azul)),
                     ],
@@ -660,7 +668,7 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
                   alignment: pw.Alignment.center,
                   child: pw.Text(
                     datos.nombre.trim().isNotEmpty ? datos.nombre.trim()[0].toUpperCase() : '?',
-                    style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: rojo),
+                    style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: colorOrg),
                   ),
                 ),
         ),
@@ -697,11 +705,11 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
         pw.Container(
           width: double.infinity,
           padding: const pw.EdgeInsets.symmetric(vertical: 5),
-          color: PdfColor.fromHex('#F3DEDE'),
+          color: PdfColor(colorOrg.red, colorOrg.green, colorOrg.blue, 0.12),
           child: pw.Text(
             'Valido ${formatoFecha.format(datos.emision)} - ${formatoFecha.format(datos.vencimiento)}',
             textAlign: pw.TextAlign.center,
-            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: rojo),
+            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: colorOrg),
           ),
         ),
       ],
@@ -770,27 +778,31 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
           padding: const pw.EdgeInsets.symmetric(horizontal: 8),
           child: pw.Column(
             children: [
-              pw.Text('SERVICIO INTERNACIONAL DE VIAJES',
+              pw.Text(organizacion.tagline.toUpperCase(),
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
                       fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
-              pw.SizedBox(height: 2),
-              pw.Text('PASAJES - EXCURSIONES - HOTELES - RECEPTIVOS - TRASLADO',
-                  textAlign: pw.TextAlign.center,
-                  style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey600)),
-              pw.SizedBox(height: 5),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.center,
-                children: [
-                  franjaBandera(
-                      [PdfColor.fromHex('#75AADB'), PdfColors.white, PdfColor.fromHex('#75AADB')]),
-                  pw.SizedBox(width: 4),
-                  franjaBandera(
-                      [PdfColor.fromHex('#D52B1E'), PdfColors.white, PdfColor.fromHex('#0038A8')]),
-                  pw.SizedBox(width: 4),
-                  banderaBrasil(),
-                ],
-              ),
+              if (organizacion.carnetSubtitulo != null) ...[
+                pw.SizedBox(height: 2),
+                pw.Text(organizacion.carnetSubtitulo!,
+                    textAlign: pw.TextAlign.center,
+                    style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey600)),
+              ],
+              if (organizacion.mostrarBanderasFrontera) ...[
+                pw.SizedBox(height: 5),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    franjaBandera(
+                        [PdfColor.fromHex('#75AADB'), PdfColors.white, PdfColor.fromHex('#75AADB')]),
+                    pw.SizedBox(width: 4),
+                    franjaBandera(
+                        [PdfColor.fromHex('#D52B1E'), PdfColors.white, PdfColor.fromHex('#0038A8')]),
+                    pw.SizedBox(width: 4),
+                    banderaBrasil(),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

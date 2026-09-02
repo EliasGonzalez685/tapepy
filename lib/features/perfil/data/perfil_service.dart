@@ -1,10 +1,13 @@
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:flutter/material.dart' show Color;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/config/supabase_config.dart';
+import '../../../shared/models/organizacion_branding.dart';
 
 /// Datos necesarios para armar el carnet (perfil + vencimiento + QR).
-/// El carnet muestra la organización (Traude), no la marca TapePy.
+/// El carnet muestra la organización real del socio (Traude, FETACE,
+/// etc.), no la marca TapePy.
 class CarnetData {
   final String usuarioId;
   final String nombre;
@@ -12,7 +15,7 @@ class CarnetData {
   final String? cedula;
   final String? telefono;
   final String? fotoPerfilUrl;
-  final String organizacionNombre;
+  final OrganizacionBranding organizacion;
   final String qrToken;
   final DateTime emision;
   final DateTime vencimiento;
@@ -21,7 +24,7 @@ class CarnetData {
     required this.usuarioId,
     required this.nombre,
     required this.rolLabel,
-    required this.organizacionNombre,
+    required this.organizacion,
     required this.qrToken,
     required this.emision,
     required this.vencimiento,
@@ -178,7 +181,9 @@ class PerfilService {
     final row = await _client
         .from('usuarios')
         .select('id, nombre, rol, cedula, telefono, foto_perfil_url, '
-            'qr_token, carnet_vencimiento, organizaciones(nombre)')
+            'qr_token, carnet_vencimiento, organizaciones(id, nombre, '
+            'nombre_completo, tagline, logo_asset, color_primario, '
+            'carnet_subtitulo, mostrar_banderas_frontera)')
         .eq('id', usuarioId)
         .single();
 
@@ -207,7 +212,19 @@ class PerfilService {
     }
 
     final emision = vencimiento.subtract(const Duration(days: 365));
-    final organizacion = row['organizaciones'] as Map<String, dynamic>?;
+    final organizacionMap = row['organizaciones'] as Map<String, dynamic>?;
+    // Solo dueno_plataforma puede no tener organización (no debería
+    // llegar a pedir un carnet, pero por las dudas no rompe).
+    final organizacion = organizacionMap != null
+        ? OrganizacionBranding.fromMap(organizacionMap)
+        : const OrganizacionBranding(
+            id: '',
+            nombre: 'TapePy',
+            nombreCompleto: 'TapePy',
+            tagline: '',
+            logoAsset: 'assets/images/tapepy_logo_blanco.png',
+            colorPrimario: Color(0xFF8B0000),
+          );
 
     return CarnetData(
       usuarioId: row['id'] as String,
@@ -216,7 +233,7 @@ class PerfilService {
       cedula: row['cedula'] as String?,
       telefono: row['telefono'] as String?,
       fotoPerfilUrl: row['foto_perfil_url'] as String?,
-      organizacionNombre: organizacion?['nombre'] as String? ?? 'Traude',
+      organizacion: organizacion,
       qrToken: qrToken,
       emision: emision,
       vencimiento: vencimiento,

@@ -148,7 +148,7 @@ class AuthService {
     final organizacionId = datos['organizacion_id'] as String?;
     final paradaId = datos['parada_id'] as String?;
     final nombre = datos['nombre'] as String?;
-    if (organizacionId == null || paradaId == null || nombre == null) {
+    if (organizacionId == null || nombre == null) {
       throw AuthException(
         'Faltan datos para completar tu registro. Contactá al administrador.',
       );

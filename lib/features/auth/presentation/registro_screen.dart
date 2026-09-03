@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/organizacion_branding.dart';
 import '../data/auth_service.dart';
 import '../data/registro_service.dart';
 
 /// Alta pública de un nuevo miembro (conductor). Accesible desde el
 /// login con "¿No tenés cuenta? Registrate". El presidente de
 /// asociación es la única cuenta que NO se crea por acá.
+///
+/// La organización ya se eligió en la pantalla anterior (selección de
+/// organización -> login), así que llega acá como argumento y no se
+/// vuelve a preguntar. La parada NO es obligatoria: el conductor puede
+/// crear su cuenta sin elegirla y el presidente de asociación se la
+/// asigna después, ya con la cuenta aprobada (ver comentario en
+/// [[project_traude_pendientes]] y conductor_service.dart).
 class RegistroScreen extends StatefulWidget {
-  const RegistroScreen({super.key});
+  final OrganizacionBranding? organizacion;
+
+  const RegistroScreen({super.key, this.organizacion});
 
   @override
   State<RegistroScreen> createState() => _RegistroScreenState();
@@ -24,7 +34,10 @@ class _RegistroScreenState extends State<RegistroScreen> {
   final _passwordController = TextEditingController();
   final _confirmarController = TextEditingController();
 
-  List<OrganizacionOpcion> _organizaciones = [];
+  // Normalmente viene de widget.organizacion.id. Solo se recurre a
+  // resolverla acá si por algún motivo se llegó a esta pantalla sin
+  // ese argumento (ej. deep link) — mismo criterio de tolerancia que
+  // ya usa LoginScreen con organizacion == null.
   String? _organizacionId;
   List<ParadaOpcion> _paradas = [];
   String? _paradaId;
@@ -41,12 +54,14 @@ class _RegistroScreenState extends State<RegistroScreen> {
     _inicializar();
   }
 
-  /// Si hay una sola organización activa se resuelve sola (sin mostrar
-  /// selector) y se cargan sus paradas. Si hay más de una (ej. Traude
-  /// + FETACE), se muestra un selector para que cada quien elija la
-  /// suya — evita que alguien quede registrado en la organización
-  /// equivocada.
   Future<void> _inicializar() async {
+    final organizacionId = widget.organizacion?.id;
+    if (organizacionId != null) {
+      await _cargarParadas(organizacionId);
+      return;
+    }
+    // Sin organización forwarded: fallback silencioso a la primera
+    // organización activa, para no dejar la pantalla inutilizable.
     try {
       final organizaciones = await _registroService.cargarOrganizaciones();
       if (!mounted) return;
@@ -57,14 +72,31 @@ class _RegistroScreenState extends State<RegistroScreen> {
         });
         return;
       }
-      setState(() => _organizaciones = organizaciones);
-      await _alElegirOrganizacion(organizaciones.first.id);
+      await _cargarParadas(organizaciones.first.id);
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _cargandoParadas = false;
         _error = 'No se pudo cargar la información. Intentá de nuevo.';
       });
+    }
+  }
+
+  Future<void> _cargarParadas(String organizacionId) async {
+    setState(() {
+      _organizacionId = organizacionId;
+      _cargandoParadas = true;
+    });
+    try {
+      final paradas = await _registroService.cargarParadas(organizacionId);
+      if (!mounted) return;
+      setState(() => _paradas = paradas);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() =>
+          _error = 'No se pudieron cargar las paradas. Intentá de nuevo.');
+    } finally {
+      if (mounted) setState(() => _cargandoParadas = false);
     }
   }
 
@@ -79,34 +111,9 @@ class _RegistroScreenState extends State<RegistroScreen> {
     super.dispose();
   }
 
-  Future<void> _alElegirOrganizacion(String? organizacionId) async {
-    setState(() {
-      _organizacionId = organizacionId;
-      _paradaId = null;
-      _paradas = [];
-    });
-    if (organizacionId == null) return;
-    setState(() => _cargandoParadas = true);
-    try {
-      final paradas = await _registroService.cargarParadas(organizacionId);
-      if (!mounted) return;
-      setState(() => _paradas = paradas);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() =>
-          _error = 'No se pudieron cargar las paradas. Intentá de nuevo.');
-    } finally {
-      if (mounted) setState(() => _cargandoParadas = false);
-    }
-  }
-
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_organizacionId == null) return;
-    if (_paradaId == null) {
-      setState(() => _error = 'Elegí tu parada.');
-      return;
-    }
     if (_passwordController.text != _confirmarController.text) {
       setState(() => _error = 'Las contraseñas no coinciden.');
       return;
@@ -125,7 +132,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
         organizacionId: _organizacionId!,
-        paradaId: _paradaId!,
+        paradaId: _paradaId,
       );
 
       if (!mounted) return;
@@ -164,6 +171,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorAcento = widget.organizacion?.colorPrimario ?? AppTheme.rojoInstitucional;
     return Scaffold(
       appBar: AppBar(title: const Text('Crear mi cuenta')),
       body: SafeArea(
@@ -178,36 +186,19 @@ class _RegistroScreenState extends State<RegistroScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      _organizaciones.length > 1
-                          ? 'Registrate con tus datos y elegí tu organización y tu parada.'
-                          : 'Registrate con tus datos y elegí tu parada.',
+                      'Registrate con tus datos. Si ya sabés a qué parada '
+                      'pertenecés podés elegirla ahora, o hacerlo después una vez '
+                      'que entres a la app.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                     ),
                     const SizedBox(height: 24),
-                    if (_organizaciones.length > 1) ...[
-                      DropdownButtonFormField<String>(
-                        value: _organizacionId,
-                        decoration: const InputDecoration(
-                          labelText: 'Organización',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: _organizaciones
-                            .map((o) => DropdownMenuItem(
-                                value: o.id, child: Text(o.nombre)))
-                            .toList(),
-                        onChanged: (value) => _alElegirOrganizacion(value),
-                        validator: (value) =>
-                            value == null ? 'Elegí tu organización' : null,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
                     DropdownButtonFormField<String>(
                       value: _paradaId,
                       decoration: InputDecoration(
-                        labelText: 'Parada',
+                        labelText: 'Parada (opcional)',
                         border: const OutlineInputBorder(),
                         suffixIcon: _cargandoParadas
                             ? const Padding(
@@ -227,8 +218,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
                       onChanged: _organizacionId == null
                           ? null
                           : (value) => setState(() => _paradaId = value),
-                      validator: (value) =>
-                          value == null ? 'Elegí tu parada' : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -339,7 +328,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
                     FilledButton(
                       onPressed: _loading ? null : _submit,
                       style: FilledButton.styleFrom(
-                          backgroundColor: AppTheme.rojoInstitucional),
+                          backgroundColor: colorAcento),
                       child: _loading
                           ? const SizedBox(
                               height: 20,

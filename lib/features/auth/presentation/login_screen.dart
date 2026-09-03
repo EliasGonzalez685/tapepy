@@ -214,7 +214,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextButton(
                       onPressed: _loading
                           ? null
-                          : () => Navigator.of(context).pushNamed(AppRouter.registro),
+                          : () => Navigator.of(context).pushNamed(
+                                AppRouter.registro,
+                                arguments: widget.organizacion,
+                              ),
                       child: const Text('¿No tenés cuenta? Registrate'),
                     ),
                   ],

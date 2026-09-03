@@ -99,7 +99,7 @@ class ConductorPerfil {
   final String usuarioId;
   final String organizacionId;
   final String? turno;
-  final String paradaId;
+  final String? paradaId;
   final String paradaNombre;
   // Un conductor (o presidente que también es socio) puede tener más
   // de un vehículo — ver [[project_traude_multivehiculo]]. Lista vacía
@@ -255,7 +255,7 @@ class ConductorService {
       usuarioId: usuarioId,
       organizacionId: row['organizacion_id'] as String,
       turno: row['turno'] as String?,
-      paradaId: row['parada_id'] as String,
+      paradaId: row['parada_id'] as String?,
       paradaNombre: parada?['nombre'] as String? ?? 'Sin asignar',
       vehiculos: vehiculos,
     );

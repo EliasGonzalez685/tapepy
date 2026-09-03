@@ -68,7 +68,7 @@ class RegistroService {
     required String email,
     required String password,
     required String organizacionId,
-    required String paradaId,
+    String? paradaId,
   }) async {
     try {
       final datosPendientes = {

@@ -479,6 +479,7 @@ class _ImprimirListadoScreenState extends State<ImprimirListadoScreen> {
                 onCambiarOtraFirma: _otroPresidenteNombre == null
                     ? null
                     : (valor) => setState(() => _incluirFirmaOtro = valor),
+                color: _colorAcento,
               ),
               // Opcional y no obligatorio: solo aparece si la
               // organización tiene un secretario asignado.
@@ -607,6 +608,7 @@ class _SeccionFirmas extends StatelessWidget {
   final String? otroPresidenteNombre;
   final bool incluirOtraFirma;
   final ValueChanged<bool>? onCambiarOtraFirma;
+  final Color color;
 
   const _SeccionFirmas({
     required this.cargandoOtro,
@@ -618,6 +620,7 @@ class _SeccionFirmas extends StatelessWidget {
     required this.otroPresidenteNombre,
     required this.incluirOtraFirma,
     required this.onCambiarOtraFirma,
+    required this.color,
   });
 
   @override
@@ -636,7 +639,7 @@ class _SeccionFirmas extends StatelessWidget {
           children: [
             CheckboxListTile(
               value: incluirMiFirma,
-              activeColor: _colorAcento,
+              activeColor: color,
               title: Text('Mi firma ($miRolLabel)'),
               onChanged: (v) => onCambiarMiFirma(v ?? false),
             ),
@@ -664,7 +667,7 @@ class _SeccionFirmas extends StatelessWidget {
             else
               CheckboxListTile(
                 value: incluirOtraFirma,
-                activeColor: _colorAcento,
+                activeColor: color,
                 title: Text('Firma del $otroRolLabel'),
                 subtitle: Text(otroPresidenteNombre!),
                 onChanged: onCambiarOtraFirma == null ? null : (v) => onCambiarOtraFirma!(v ?? false),

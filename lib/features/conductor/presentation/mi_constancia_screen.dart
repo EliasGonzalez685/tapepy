@@ -85,7 +85,9 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
     try {
       await _constanciaService.solicitarConstancia(
         organizacionId: perfil.organizacionId,
-        paradaId: perfil.paradaId,
+        // Solo se llega acá con perfil.paradaId no nulo -- ver guard en
+        // build() (if perfil == null || perfil.paradaId == null).
+        paradaId: perfil.paradaId!,
         usuarioId: widget.usuario.id,
       );
       if (!mounted) return;
@@ -196,7 +198,7 @@ class _MiConstanciaScreenState extends State<MiConstanciaScreen> {
             return ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                if (perfil == null)
+                if (perfil == null || perfil.paradaId == null)
                   const Card(
                     child: Padding(
                       padding: EdgeInsets.all(20),

@@ -36,7 +36,10 @@ class AppRouter {
           organizacion: ModalRoute.of(context)!.settings.arguments
               as OrganizacionBranding?,
         ),
-    registro: (_) => const RegistroScreen(),
+    registro: (context) => RegistroScreen(
+          organizacion: ModalRoute.of(context)!.settings.arguments
+              as OrganizacionBranding?,
+        ),
     conductorHome: (context) => ConductorHomeScreen(
           usuario: ModalRoute.of(context)!.settings.arguments as Usuario?,
         ),

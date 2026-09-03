@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/config/supabase_config.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/organizacion_branding.dart';
 import '../data/balance_pagos.dart';
 import '../data/parada_detalle_service.dart';

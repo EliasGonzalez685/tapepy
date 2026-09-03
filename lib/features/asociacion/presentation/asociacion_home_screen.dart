@@ -381,7 +381,7 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
                     child: ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        _GreetingHeader(usuario: widget.usuario),
+                        _GreetingHeader(usuario: widget.usuario, organizacion: _organizacion),
                         const SizedBox(height: 20),
                         _StatsGrid(
                           datos: snapshot.data!,
@@ -417,7 +417,8 @@ class _AsociacionHomeScreenState extends State<AsociacionHomeScreen> {
 
 class _GreetingHeader extends StatelessWidget {
   final Usuario? usuario;
-  const _GreetingHeader({required this.usuario});
+  final OrganizacionBranding? organizacion;
+  const _GreetingHeader({required this.usuario, required this.organizacion});
 
   String get _saludo {
     final hora = DateTime.now().hour;
@@ -435,8 +436,8 @@ class _GreetingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final nombre = usuario?.nombre ?? 'Presidente';
     final inicial = nombre.trim().isNotEmpty ? nombre.trim()[0].toUpperCase() : 'P';
-    final colorOrg = _organizacion?.colorPrimario ?? AppTheme.rojoInstitucional;
-    final logoOrg = _organizacion?.logoAsset ?? 'assets/images/traude_logo.png';
+    final colorOrg = organizacion?.colorPrimario ?? AppTheme.rojoInstitucional;
+    final logoOrg = organizacion?.logoAsset ?? 'assets/images/traude_logo.png';
 
     return Container(
       padding: const EdgeInsets.all(18),

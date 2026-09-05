@@ -44,6 +44,14 @@ class SupabaseConfig {
   /// constante de nuevo. Cambiado el 2026-08-25 (antes apuntaba a
   /// eliasgonzalez685.github.io/traude-web/, y antes de eso a
   /// eliasgonzalez685.github.io/tapepy/).
-  static String urlVerificacionCarnet(String qrToken) =>
-      'https://traude-tour.vercel.app/verificar-carnet.html?token=$qrToken';
+  ///
+  /// A partir de 2026-09-05 esto es org-aware: cada organización puede
+  /// tener su propia página de verificación (columna
+  /// `organizaciones.url_verificacion_carnet`, ver
+  /// OrganizacionBranding.urlVerificacionCarnet). [baseUrl] es esa URL,
+  /// pasada por el llamador desde datos.organizacion; si viene null
+  /// (organización sin sitio propio todavía) se cae a la de Traude,
+  /// que sigue siendo el fallback histórico.
+  static String urlVerificacionCarnet(String qrToken, {String? baseUrl}) =>
+      '${baseUrl ?? 'https://traude-tour.vercel.app/verificar-carnet.html'}?token=$qrToken';
 }

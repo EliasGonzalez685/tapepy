@@ -76,7 +76,10 @@ class _MiQrScreenState extends State<MiQrScreen> {
                       ],
                     ),
                     child: QrImageView(
-                      data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
+                      data: SupabaseConfig.urlVerificacionCarnet(
+                        datos.qrToken,
+                        baseUrl: datos.organizacion.urlVerificacionCarnet,
+                      ),
                       size: 220,
                     ),
                   ),

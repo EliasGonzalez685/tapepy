@@ -24,6 +24,12 @@ class OrganizacionBranding {
   // los cargó (no se inventa nada, simplemente no sale esa línea).
   final String? membreteLegal;
   final String? telefonoMembrete;
+  // URL base de la página pública verificar-carnet.html de esta
+  // organización (sin el ?token=...) -- adonde tiene que redirigir el
+  // QR del carnet digital de sus socios. Null si la organización
+  // todavía no tiene sitio propio; en ese caso se usa el de Traude
+  // como fallback (ver SupabaseConfig.urlVerificacionCarnet).
+  final String? urlVerificacionCarnet;
 
   const OrganizacionBranding({
     required this.id,
@@ -36,6 +42,7 @@ class OrganizacionBranding {
     this.mostrarBanderasFrontera = false,
     this.membreteLegal,
     this.telefonoMembrete,
+    this.urlVerificacionCarnet,
   });
 
   factory OrganizacionBranding.fromMap(Map<String, dynamic> map) {
@@ -50,6 +57,7 @@ class OrganizacionBranding {
       mostrarBanderasFrontera: map['mostrar_banderas_frontera'] as bool? ?? false,
       membreteLegal: map['membrete_legal'] as String?,
       telefonoMembrete: map['telefono_membrete'] as String?,
+      urlVerificacionCarnet: map['url_verificacion_carnet'] as String?,
     );
   }
 

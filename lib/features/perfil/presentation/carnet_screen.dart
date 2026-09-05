@@ -406,7 +406,10 @@ class _CaraReverso extends StatelessWidget {
           _EncabezadoOrganizacion(organizacion: datos.organizacion),
           const Spacer(),
           QrImageView(
-            data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
+            data: SupabaseConfig.urlVerificacionCarnet(
+              datos.qrToken,
+              baseUrl: datos.organizacion.urlVerificacionCarnet,
+            ),
             size: 138,
           ),
           const SizedBox(height: 10),
@@ -760,7 +763,10 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
         pw.Spacer(),
         pw.BarcodeWidget(
           barcode: pw.Barcode.qrCode(),
-          data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
+          data: SupabaseConfig.urlVerificacionCarnet(
+            datos.qrToken,
+            baseUrl: organizacion.urlVerificacionCarnet,
+          ),
           width: 78,
           height: 78,
         ),

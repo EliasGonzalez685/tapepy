@@ -17,7 +17,7 @@ class OrganizacionBrandingService {
 
   static const _columnas = 'id, nombre, nombre_completo, tagline, logo_asset, '
       'color_primario, carnet_subtitulo, mostrar_banderas_frontera, '
-      'membrete_legal, telefono_membrete';
+      'membrete_legal, telefono_membrete, url_verificacion_carnet';
 
   /// Todas las organizaciones activas, para pantallas previas al login
   /// (selección de organización) o el selector de registro.

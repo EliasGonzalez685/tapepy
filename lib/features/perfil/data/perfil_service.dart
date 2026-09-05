@@ -183,7 +183,8 @@ class PerfilService {
         .select('id, nombre, rol, cedula, telefono, foto_perfil_url, '
             'qr_token, carnet_vencimiento, organizaciones(id, nombre, '
             'nombre_completo, tagline, logo_asset, color_primario, '
-            'carnet_subtitulo, mostrar_banderas_frontera)')
+            'carnet_subtitulo, mostrar_banderas_frontera, '
+            'url_verificacion_carnet)')
         .eq('id', usuarioId)
         .single();
 

@@ -32,7 +32,10 @@ Future<Uint8List> generarPdfQr(CarnetData datos) async {
             pw.SizedBox(height: 16),
             pw.BarcodeWidget(
               barcode: pw.Barcode.qrCode(),
-              data: SupabaseConfig.urlVerificacionCarnet(datos.qrToken),
+              data: SupabaseConfig.urlVerificacionCarnet(
+                datos.qrToken,
+                baseUrl: datos.organizacion.urlVerificacionCarnet,
+              ),
               width: 160,
               height: 160,
             ),

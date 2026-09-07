@@ -3,6 +3,7 @@ import '../../../core/routing/app_router.dart';
 import '../../../shared/data/organizacion_branding_service.dart';
 import '../../../shared/models/organizacion_branding.dart';
 import '../../../shared/models/tipo_organizacion.dart';
+import '../../plataforma/presentation/solicitar_organizacion_screen.dart';
 
 /// Elegir con qué organización/cliente entrar, ya dentro del rubro
 /// elegido en la pantalla anterior (TipoOrganizacionSelectScreen).
@@ -89,6 +90,18 @@ class _OrganizacionSelectScreenState extends State<OrganizacionSelectScreen> {
                     },
                   );
                 },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => SolicitarOrganizacionScreen(tipoInicial: widget.tipo),
+                  ),
+                ),
+                icon: const Icon(Icons.add_business_outlined),
+                label: const Text('¿Tu organización no está? Solicitá sumarla'),
               ),
             ),
           ],

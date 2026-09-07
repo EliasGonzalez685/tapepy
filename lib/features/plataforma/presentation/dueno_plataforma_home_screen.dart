@@ -6,8 +6,10 @@ import '../../../shared/widgets/menu_lateral.dart';
 import '../../asociacion/presentation/asociacion_home_screen.dart';
 import '../../asociacion/presentation/balance_general_screen.dart';
 import '../data/presidente_asociacion_service.dart';
+import '../data/solicitud_organizacion_service.dart';
 import 'cuentas_bloqueadas_screen.dart';
 import 'cuotas_plataforma_screen.dart';
+import 'solicitudes_organizacion_screen.dart';
 
 /// Home del dueño de plataforma (Elias): es prácticamente el mismo
 /// panel que ve el presidente de asociación (paradas, solicitudes,
@@ -27,13 +29,44 @@ class DuenoPlataformaHomeScreen extends StatefulWidget {
 
 class _DuenoPlataformaHomeScreenState extends State<DuenoPlataformaHomeScreen> {
   final _organizacionService = OrganizacionService();
+  final _solicitudOrganizacionService = SolicitudOrganizacionService();
   late Future<List<OrganizacionItem>> _future;
   OrganizacionItem? _seleccionada;
+  int _solicitudesOrgPendientes = 0;
 
   @override
   void initState() {
     super.initState();
     _future = _organizacionService.cargarOrganizaciones();
+    _cargarSolicitudesOrgPendientes();
+  }
+
+  Future<void> _cargarSolicitudesOrgPendientes() async {
+    try {
+      final pendientes = await _solicitudOrganizacionService.listarPendientes();
+      if (mounted) setState(() => _solicitudesOrgPendientes = pendientes.length);
+    } catch (_) {
+      // Si falla, simplemente no se muestra el numerito -- no es crítico.
+    }
+  }
+
+  /// Recarga la lista de organizaciones (por si se acaba de aprobar una
+  /// nueva) y deja al dueño elegir sobre cuál pararse, ya que por
+  /// defecto siempre queda la primera en orden alfabético.
+  Future<void> _cambiarOrganizacion() async {
+    final organizaciones = await _future;
+    if (!mounted) return;
+    final elegida = await showModalBottomSheet<OrganizacionItem>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _SelectorOrganizacionSheet(
+        organizaciones: organizaciones,
+        seleccionadaId: _seleccionada?.id,
+      ),
+    );
+    if (elegida != null && mounted) {
+      setState(() => _seleccionada = elegida);
+    }
   }
 
   @override
@@ -69,6 +102,31 @@ class _DuenoPlataformaHomeScreenState extends State<DuenoPlataformaHomeScreen> {
           key: ValueKey(_seleccionada!.id),
           usuario: usuarioComoAsociacion,
           itemsExtraAdicionales: [
+            ItemMenuLateral(
+              icono: Icons.swap_horiz,
+              titulo: 'Cambiar organización',
+              onTap: () {
+                Navigator.of(context).pop();
+                _cambiarOrganizacion();
+              },
+            ),
+            ItemMenuLateral(
+              icono: Icons.domain_add_outlined,
+              titulo: 'Solicitudes de organización',
+              contador: _solicitudesOrgPendientes > 0 ? _solicitudesOrgPendientes : null,
+              onTap: () {
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                navigator
+                    .push(
+                      MaterialPageRoute(builder: (_) => const SolicitudesOrganizacionScreen()),
+                    )
+                    .then((_) {
+                  _cargarSolicitudesOrgPendientes();
+                  setState(() => _future = _organizacionService.cargarOrganizaciones());
+                });
+              },
+            ),
             ItemMenuLateral(
               icono: Icons.admin_panel_settings_outlined,
               titulo: 'Presidente de asociación',
@@ -301,6 +359,58 @@ class _AsignarPresidenteAsociacionSheetState extends State<_AsignarPresidenteAso
           ),
         );
       },
+    );
+  }
+}
+
+/// Lista simple para que el dueño de plataforma elija sobre qué
+/// organización pararse a administrar -- necesario porque por defecto
+/// siempre queda la primera en orden alfabético, y una organización
+/// recién aprobada (ver SolicitudesOrganizacionScreen) puede no serlo.
+class _SelectorOrganizacionSheet extends StatelessWidget {
+  final List<OrganizacionItem> organizaciones;
+  final String? seleccionadaId;
+
+  const _SelectorOrganizacionSheet({
+    required this.organizaciones,
+    required this.seleccionadaId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Elegí la organización',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: organizaciones.length,
+                itemBuilder: (context, index) {
+                  final org = organizaciones[index];
+                  return RadioListTile<String>(
+                    value: org.id,
+                    groupValue: seleccionadaId,
+                    activeColor: AppTheme.rojoInstitucional,
+                    title: Text(org.nombre),
+                    onChanged: (_) => Navigator.of(context).pop(org),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

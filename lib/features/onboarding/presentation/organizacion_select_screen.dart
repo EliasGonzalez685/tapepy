@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../shared/data/organizacion_branding_service.dart';
 import '../../../shared/models/organizacion_branding.dart';
+import '../../../shared/models/tipo_organizacion.dart';
 
-/// Elegir con qué organización/cliente entrar. Lista todas las
-/// organizaciones activas (Traude, FETACE, y las que se sumen
-/// después) leyéndolas de la tabla `organizaciones`, que tiene una
-/// política RLS pública para filas activas — no hace falta haber
-/// iniciado sesión para verla.
+/// Elegir con qué organización/cliente entrar, ya dentro del rubro
+/// elegido en la pantalla anterior (TipoOrganizacionSelectScreen).
+/// Lista las organizaciones activas de ese rubro leyéndolas de la
+/// tabla `organizaciones`, que tiene una política RLS pública para
+/// filas activas -- no hace falta haber iniciado sesión para verla.
 class OrganizacionSelectScreen extends StatefulWidget {
-  const OrganizacionSelectScreen({super.key});
+  final TipoOrganizacion tipo;
+
+  const OrganizacionSelectScreen({super.key, required this.tipo});
 
   @override
   State<OrganizacionSelectScreen> createState() =>
@@ -23,13 +26,13 @@ class _OrganizacionSelectScreenState extends State<OrganizacionSelectScreen> {
   @override
   void initState() {
     super.initState();
-    _future = _service.listarActivas();
+    _future = _service.listarActivasPorTipo(widget.tipo);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Elegí tu organización')),
+      appBar: AppBar(title: Text('Organizaciones de ${widget.tipo.label}')),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -60,8 +63,16 @@ class _OrganizacionSelectScreenState extends State<OrganizacionSelectScreen> {
                   }
                   final organizaciones = snapshot.data ?? [];
                   if (organizaciones.isEmpty) {
-                    return const Center(
-                        child: Text('Todavía no hay organizaciones activas.'));
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          'Todavía no hay organizaciones de ${widget.tipo.label} '
+                          'activas en la plataforma.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
                   }
                   return ListView.separated(
                     itemCount: organizaciones.length,

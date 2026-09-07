@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'tipo_organizacion.dart';
 
 /// Identidad visual de una organización cliente de TapePy (nombre,
 /// logo, color institucional). Se lee de la tabla `organizaciones` —
@@ -30,6 +31,11 @@ class OrganizacionBranding {
   // todavía no tiene sitio propio; en ese caso se usa el de Traude
   // como fallback (ver SupabaseConfig.urlVerificacionCarnet).
   final String? urlVerificacionCarnet;
+  // Rubro de servicio (transporte alternativo / taxi / mototaxi), para
+  // filtrar el listado en la pantalla de selección de organización
+  // según lo elegido en la pantalla previa de tipo. Null si la
+  // organización todavía no fue clasificada.
+  final TipoOrganizacion? tipo;
 
   const OrganizacionBranding({
     required this.id,
@@ -43,6 +49,7 @@ class OrganizacionBranding {
     this.membreteLegal,
     this.telefonoMembrete,
     this.urlVerificacionCarnet,
+    this.tipo,
   });
 
   factory OrganizacionBranding.fromMap(Map<String, dynamic> map) {
@@ -58,6 +65,7 @@ class OrganizacionBranding {
       membreteLegal: map['membrete_legal'] as String?,
       telefonoMembrete: map['telefono_membrete'] as String?,
       urlVerificacionCarnet: map['url_verificacion_carnet'] as String?,
+      tipo: TipoOrganizacion.desdeValorDb(map['tipo'] as String?),
     );
   }
 

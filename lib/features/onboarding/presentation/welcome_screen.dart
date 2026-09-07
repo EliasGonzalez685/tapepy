@@ -115,7 +115,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   child: FilledButton(
                     onPressed: () {
                       Navigator.of(context)
-                          .pushNamed(AppRouter.organizacionSelect);
+                          .pushNamed(AppRouter.tipoOrganizacionSelect);
                     },
                     style: FilledButton.styleFrom(
                       backgroundColor: AppTheme.rojoInstitucional,

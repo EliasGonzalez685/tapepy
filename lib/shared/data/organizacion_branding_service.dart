@@ -1,5 +1,6 @@
 import '../../core/config/supabase_config.dart';
 import '../models/organizacion_branding.dart';
+import '../models/tipo_organizacion.dart';
 
 /// Carga la identidad visual (nombre, logo, color) de las
 /// organizaciones. La tabla `organizaciones` tiene una política RLS
@@ -17,7 +18,7 @@ class OrganizacionBrandingService {
 
   static const _columnas = 'id, nombre, nombre_completo, tagline, logo_asset, '
       'color_primario, carnet_subtitulo, mostrar_banderas_frontera, '
-      'membrete_legal, telefono_membrete, url_verificacion_carnet';
+      'membrete_legal, telefono_membrete, url_verificacion_carnet, tipo';
 
   /// Todas las organizaciones activas, para pantallas previas al login
   /// (selección de organización) o el selector de registro.
@@ -36,6 +37,19 @@ class OrganizacionBrandingService {
       _cachePorId[org.id] = org;
     }
     return resultado;
+  }
+
+  /// Organizaciones activas de un rubro puntual (ver TipoOrganizacion),
+  /// para la pantalla de "Elegí tu organización" después de que el
+  /// usuario ya eligió el rubro en la pantalla anterior. Reusa el
+  /// mismo listado/caché de [listarActivas] y filtra en memoria -- no
+  /// vale la pena un viaje aparte al servidor por esto.
+  Future<List<OrganizacionBranding>> listarActivasPorTipo(
+    TipoOrganizacion tipo, {
+    bool forzar = false,
+  }) async {
+    final todas = await listarActivas(forzar: forzar);
+    return todas.where((org) => org.tipo == tipo).toList();
   }
 
   /// La organización de un usuario ya logueado (por su organizacion_id).

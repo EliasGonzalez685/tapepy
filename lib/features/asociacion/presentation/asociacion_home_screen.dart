@@ -442,7 +442,7 @@ class _GreetingHeader extends StatelessWidget {
     // alta) no hay imagen que mostrar -- se muestra la inicial.
     final logoOrg = organizacion == null
         ? 'assets/images/traude_logo.png'
-        : organizacion.logoAsset;
+        : organizacion?.logoAsset;
     final inicialOrg = organizacion?.inicial ?? inicial;
 
     return Container(

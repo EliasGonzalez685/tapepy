@@ -152,8 +152,21 @@ Deno.serve(async (req: Request) => {
     p_usuario_id: usuario.id as string,
   });
 
+  // Bloqueo manual del dueño de plataforma por falta de pago -- de la
+  // cuenta puntual, de toda su parada, o de toda su organización
+  // (pedido de Elias 2026-09-07). Mismo criterio de siempre: la página
+  // pública no distingue el motivo, solo dice "no válido".
+  const { data: bloqueadoManual } = await supabase.rpc('usuario_bloqueado_efectivo', {
+    p_usuario_id: usuario.id as string,
+  });
+
   const vigente =
-    usuario.activo && usuario.cuenta_confirmada && !usuario.bloqueado && carnetVigente && !enDeuda;
+    usuario.activo &&
+    usuario.cuenta_confirmada &&
+    !usuario.bloqueado &&
+    !bloqueadoManual &&
+    carnetVigente &&
+    !enDeuda;
 
   if (!vigente) {
     return paginaInvalida();

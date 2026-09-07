@@ -25,6 +25,13 @@ class AuthService {
   /// conteo vive en el backend (columnas + funciones en `usuarios`),
   /// acá solo se consulta/reporta.
   ///
+  /// Bloqueo manual por falta de pago (pedido de Elias, 2026-09-07): el
+  /// dueño de plataforma también puede bloquear, temporal o
+  /// permanentemente, una cuenta puntual, toda una parada, o toda una
+  /// organización -- ver login_estado_bloqueo, que resuelve estos 4
+  /// motivos posibles en una sola llamada (ver
+  /// CuotaPlataformaService para las acciones de bloqueo/desbloqueo).
+  ///
   /// Tira [AuthException] con un mensaje entendible si algo falla.
   Future<Usuario> signIn({
     required String identificador,
@@ -33,16 +40,15 @@ class AuthService {
     try {
       final email = await _resolverEmail(identificador.trim());
 
-      final bloqueado = await _client.rpc(
-        'login_verificar_bloqueo',
+      final estadoBloqueo = await _client.rpc(
+        'login_estado_bloqueo',
         params: {'p_email': email},
-      ) as bool? ??
-          false;
-      if (bloqueado) {
-        throw AuthException(
-          'Esta cuenta quedó bloqueada por varios intentos fallidos. '
-          'Solo el dueño de la plataforma puede desbloquearla.',
-        );
+      ) as List;
+      if (estadoBloqueo.isNotEmpty) {
+        final fila = estadoBloqueo.first as Map<String, dynamic>;
+        if (fila['bloqueado'] == true) {
+          throw AuthException(_mensajeBloqueo(fila));
+        }
       }
 
       final AuthResponse authResponse;
@@ -161,6 +167,36 @@ class AuthService {
       'p_telefono': datos['telefono'],
       'p_email': datos['email'],
     });
+  }
+
+  /// Arma un mensaje entendible según el motivo que devolvió
+  /// login_estado_bloqueo (intentos_fallidos | manual | parada |
+  /// organizacion) -- no se muestra igual en los 4 casos porque cada
+  /// uno se resuelve distinto (el primero solo el dueño lo levanta, los
+  /// otros 3 pueden tener fecha de vencimiento).
+  String _mensajeBloqueo(Map<String, dynamic> fila) {
+    final motivo = fila['motivo'] as String?;
+    final detalle = fila['detalle'] as String?;
+    final hastaTexto = fila['hasta'] as String?;
+    final hasta = hastaTexto != null ? DateTime.tryParse(hastaTexto) : null;
+    final vencimiento = hasta != null
+        ? ' Vuelve a habilitarse el ${hasta.day.toString().padLeft(2, '0')}/'
+            '${hasta.month.toString().padLeft(2, '0')}/${hasta.year}.'
+        : '';
+    final motivoTexto = (detalle != null && detalle.trim().isNotEmpty) ? ' Motivo: $detalle.' : '';
+
+    switch (motivo) {
+      case 'manual':
+        return 'Tu cuenta fue bloqueada por el dueño de la plataforma.$motivoTexto$vencimiento';
+      case 'parada':
+        return 'Tu parada fue bloqueada por el dueño de la plataforma.$motivoTexto$vencimiento';
+      case 'organizacion':
+        return 'Tu organización fue bloqueada por el dueño de la plataforma.$motivoTexto$vencimiento';
+      case 'intentos_fallidos':
+      default:
+        return 'Esta cuenta quedó bloqueada por varios intentos fallidos. '
+            'Solo el dueño de la plataforma puede desbloquearla.';
+    }
   }
 
   String _mensajeLegible(AuthApiException e) {

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/data/organizacion_service.dart';
 import '../../../shared/models/usuario.dart';
+import '../../../shared/models/user_role.dart';
 import '../../../shared/widgets/icon_badge.dart';
 import '../data/cuota_plataforma_service.dart';
 
@@ -41,6 +42,13 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
   late Future<List<OrganizacionItem>> _organizacionesFuture;
   OrganizacionItem? _seleccionada;
   Future<List<EstadoCuotaPlataforma>>? _estadosFuture;
+  Future<EstadoBloqueoOrganizacion>? _estadoBloqueoOrgFuture;
+
+  // Las acciones de bloqueo (cuenta/parada/organización) son exclusivas
+  // del dueño de plataforma -- presidente_asociacion/parada llegan a
+  // esta misma pantalla para ver y cobrar, pero no para bloquear a
+  // nadie (pedido de Elias 2026-09-07).
+  bool get _esDueno => widget.usuario.rol == UserRole.duenoPlataforma;
 
   @override
   void initState() {
@@ -52,6 +60,8 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
     setState(() {
       _seleccionada = organizacion;
       _estadosFuture = _cuotaService.cargarEstadoOrganizacion(organizacion.id);
+      _estadoBloqueoOrgFuture =
+          _esDueno ? _cuotaService.obtenerEstadoBloqueoOrganizacion(organizacion.id) : null;
     });
   }
 
@@ -59,6 +69,9 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
     if (_seleccionada == null) return;
     setState(() {
       _estadosFuture = _cuotaService.cargarEstadoOrganizacion(_seleccionada!.id);
+      if (_esDueno) {
+        _estadoBloqueoOrgFuture = _cuotaService.obtenerEstadoBloqueoOrganizacion(_seleccionada!.id);
+      }
     });
   }
 
@@ -101,6 +114,106 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
     }
   }
 
+  Future<void> _bloquearUsuario(EstadoCuotaPlataforma estado) async {
+    final resultado = await _pedirDatosBloqueo(titulo: 'Bloquear a ${estado.nombre ?? "esta persona"}');
+    if (resultado == null) return;
+    try {
+      await _cuotaService.bloquearUsuario(
+        usuarioId: estado.usuarioId,
+        motivo: resultado.motivo,
+        bloqueadoPor: widget.usuario.id,
+        hasta: resultado.hasta,
+      );
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo bloquear. Intentá de nuevo.')));
+    }
+  }
+
+  Future<void> _desbloquearUsuario(EstadoCuotaPlataforma estado) async {
+    try {
+      await _cuotaService.desbloquearUsuario(estado.usuarioId);
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo desbloquear. Intentá de nuevo.')));
+    }
+  }
+
+  Future<void> _bloquearParada(String paradaId, String paradaNombre) async {
+    final resultado = await _pedirDatosBloqueo(titulo: 'Bloquear parada $paradaNombre');
+    if (resultado == null) return;
+    try {
+      await _cuotaService.bloquearParada(
+        paradaId: paradaId,
+        motivo: resultado.motivo,
+        bloqueadoPor: widget.usuario.id,
+        hasta: resultado.hasta,
+      );
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo bloquear la parada. Intentá de nuevo.')));
+    }
+  }
+
+  Future<void> _desbloquearParada(String paradaId) async {
+    try {
+      await _cuotaService.desbloquearParada(paradaId);
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo desbloquear la parada. Intentá de nuevo.')));
+    }
+  }
+
+  Future<void> _bloquearOrganizacion() async {
+    final organizacion = _seleccionada;
+    if (organizacion == null) return;
+    final resultado = await _pedirDatosBloqueo(titulo: 'Bloquear ${organizacion.nombre}');
+    if (resultado == null) return;
+    try {
+      await _cuotaService.bloquearOrganizacion(
+        organizacionId: organizacion.id,
+        motivo: resultado.motivo,
+        bloqueadoPor: widget.usuario.id,
+        hasta: resultado.hasta,
+      );
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No se pudo bloquear la organización. Intentá de nuevo.')));
+    }
+  }
+
+  Future<void> _desbloquearOrganizacion() async {
+    final organizacion = _seleccionada;
+    if (organizacion == null) return;
+    try {
+      await _cuotaService.desbloquearOrganizacion(organizacion.id);
+      _refrescar();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo desbloquear la organización. Intentá de nuevo.')));
+    }
+  }
+
+  Future<_ResultadoBloqueo?> _pedirDatosBloqueo({required String titulo}) {
+    return showModalBottomSheet<_ResultadoBloqueo>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => _FormularioBloqueo(titulo: titulo),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,6 +225,19 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
               icon: const Icon(Icons.tune),
               tooltip: 'Editar monto mensual',
               onPressed: _editarMonto,
+            ),
+          if (_seleccionada != null && _esDueno)
+            FutureBuilder<EstadoBloqueoOrganizacion>(
+              future: _estadoBloqueoOrgFuture,
+              builder: (context, snapshot) {
+                final bloqueada = snapshot.data?.vigente ?? false;
+                return IconButton(
+                  icon: Icon(bloqueada ? Icons.lock : Icons.lock_open_outlined),
+                  tooltip: bloqueada ? 'Desbloquear organización' : 'Bloquear organización',
+                  color: bloqueada ? AppTheme.estadoUrgente : null,
+                  onPressed: bloqueada ? _desbloquearOrganizacion : _bloquearOrganizacion,
+                );
+              },
             ),
         ],
       ),
@@ -127,6 +253,9 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
           }
           _seleccionada ??= organizaciones.first;
           _estadosFuture ??= _cuotaService.cargarEstadoOrganizacion(_seleccionada!.id);
+          if (_esDueno) {
+            _estadoBloqueoOrgFuture ??= _cuotaService.obtenerEstadoBloqueoOrganizacion(_seleccionada!.id);
+          }
 
           return Column(
             children: [
@@ -148,6 +277,38 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
                   },
                 ),
               ),
+              if (_esDueno)
+                FutureBuilder<EstadoBloqueoOrganizacion>(
+                  future: _estadoBloqueoOrgFuture,
+                  builder: (context, snapshot) {
+                    final estado = snapshot.data;
+                    if (estado == null || !estado.vigente) return const SizedBox.shrink();
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.estadoUrgente.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.estadoUrgente.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock, color: AppTheme.estadoUrgente, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Esta organización está bloqueada.'
+                              '${estado.motivo != null ? ' Motivo: ${estado.motivo}.' : ''}'
+                              '${estado.hasta != null ? ' Hasta el ${_formatoFechaCorta(estado.hasta!)}.' : ' Sin fecha de reactivación.'}',
+                              style: const TextStyle(color: AppTheme.estadoUrgente, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               Expanded(
                 child: FutureBuilder<List<EstadoCuotaPlataforma>>(
                   future: _estadosFuture,
@@ -190,6 +351,11 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
                         ...grupos.map((grupo) => _GrupoParadaCard(
                               grupo: grupo,
                               onCambiarEstado: _cambiarEstado,
+                              esDueno: _esDueno,
+                              onBloquearUsuario: _bloquearUsuario,
+                              onDesbloquearUsuario: _desbloquearUsuario,
+                              onBloquearParada: _bloquearParada,
+                              onDesbloquearParada: _desbloquearParada,
                             )),
                       ],
                     );
@@ -202,6 +368,9 @@ class _CuotasPlataformaScreenState extends State<CuotasPlataformaScreen> {
       ),
     );
   }
+
+  String _formatoFechaCorta(DateTime fecha) =>
+      '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
 }
 
 class _ResumenOrganizacion extends StatelessWidget {
@@ -263,30 +432,85 @@ class _StatMini extends StatelessWidget {
 class _GrupoParadaCard extends StatelessWidget {
   final GrupoEstadoCuotaPlataforma grupo;
   final void Function(EstadoCuotaPlataforma estado, String nuevoEstado) onCambiarEstado;
-  const _GrupoParadaCard({required this.grupo, required this.onCambiarEstado});
+  final bool esDueno;
+  final void Function(EstadoCuotaPlataforma estado)? onBloquearUsuario;
+  final void Function(EstadoCuotaPlataforma estado)? onDesbloquearUsuario;
+  final void Function(String paradaId, String paradaNombre)? onBloquearParada;
+  final void Function(String paradaId)? onDesbloquearParada;
+
+  const _GrupoParadaCard({
+    required this.grupo,
+    required this.onCambiarEstado,
+    this.esDueno = false,
+    this.onBloquearUsuario,
+    this.onDesbloquearUsuario,
+    this.onBloquearParada,
+    this.onDesbloquearParada,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final colorBadge = grupo.enDeuda > 0 ? AppTheme.estadoUrgente : AppTheme.estadoOk;
+    final paradaBloqueada = grupo.estados.isNotEmpty && grupo.estados.first.paradaBloqueadaVigente;
+    final colorBadge = paradaBloqueada
+        ? AppTheme.estadoUrgente
+        : (grupo.enDeuda > 0 ? AppTheme.estadoUrgente : AppTheme.estadoOk);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ExpansionTile(
-        leading: IconBadge(icono: Icons.location_pin, color: colorBadge, diametro: 40),
+        leading: IconBadge(
+          icono: paradaBloqueada ? Icons.lock : Icons.location_pin,
+          color: colorBadge,
+          diametro: 40,
+        ),
         title: Text(grupo.paradaNombre ?? 'Sin parada asignada'),
         subtitle: Text(
-          grupo.enDeuda > 0 ? '${grupo.enDeuda} de ${grupo.total} morosos' : 'Todos al día (${grupo.total})',
+          paradaBloqueada
+              ? 'Parada bloqueada'
+              : (grupo.enDeuda > 0 ? '${grupo.enDeuda} de ${grupo.total} morosos' : 'Todos al día (${grupo.total})'),
           style: TextStyle(color: colorBadge, fontWeight: FontWeight.w600),
         ),
-        children: grupo.estados.map((e) => _EstadoRow(estado: e, onCambiarEstado: onCambiarEstado)).toList(),
+        trailing: esDueno && grupo.paradaId != null
+            ? IconButton(
+                icon: Icon(paradaBloqueada ? Icons.lock_open_outlined : Icons.lock_outline, size: 20),
+                tooltip: paradaBloqueada ? 'Desbloquear parada' : 'Bloquear parada',
+                onPressed: paradaBloqueada
+                    ? () => onDesbloquearParada?.call(grupo.paradaId!)
+                    : () => onBloquearParada?.call(grupo.paradaId!, grupo.paradaNombre ?? 'esta parada'),
+              )
+            : null,
+        children: grupo.estados
+            .map((e) => _EstadoRow(
+                  estado: e,
+                  onCambiarEstado: onCambiarEstado,
+                  esDueno: esDueno,
+                  onBloquear: onBloquearUsuario,
+                  onDesbloquear: onDesbloquearUsuario,
+                ))
+            .toList(),
       ),
     );
   }
 }
 
+const _labelsMetodoPago = {
+  'efectivo': 'Efectivo',
+  'transferencia': 'Transferencia',
+};
+
 class _EstadoRow extends StatelessWidget {
   final EstadoCuotaPlataforma estado;
   final void Function(EstadoCuotaPlataforma estado, String nuevoEstado) onCambiarEstado;
-  const _EstadoRow({required this.estado, required this.onCambiarEstado});
+  final bool esDueno;
+  final void Function(EstadoCuotaPlataforma estado)? onBloquear;
+  final void Function(EstadoCuotaPlataforma estado)? onDesbloquear;
+
+  const _EstadoRow({
+    required this.estado,
+    required this.onCambiarEstado,
+    this.esDueno = false,
+    this.onBloquear,
+    this.onDesbloquear,
+  });
 
   Color get _color {
     switch (estado.estado) {
@@ -303,12 +527,26 @@ class _EstadoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final formatoMonto = NumberFormat.decimalPattern('es');
+    final bloqueadoPorCuenta = estado.bloqueoManualVigente;
+    final subtitulo = [
+      _labelsRol[estado.rol] ?? estado.rol ?? '',
+      if (estado.cedula != null && estado.cedula!.trim().isNotEmpty) 'CI ${estado.cedula}',
+      '₲ ${formatoMonto.format(estado.monto)}',
+      if (estado.metodoPago != null) _labelsMetodoPago[estado.metodoPago!] ?? estado.metodoPago!,
+    ].join(' · ');
+
     return ListTile(
       dense: true,
-      title: Text(estado.nombre ?? 'Usuario'),
-      subtitle: Text(
-        '${_labelsRol[estado.rol] ?? estado.rol ?? ''} · ₲ ${formatoMonto.format(estado.monto)}',
+      title: Row(
+        children: [
+          Flexible(child: Text(estado.nombre ?? 'Usuario')),
+          if (bloqueadoPorCuenta) ...[
+            const SizedBox(width: 6),
+            const Icon(Icons.lock, size: 14, color: AppTheme.estadoUrgente),
+          ],
+        ],
       ),
+      subtitle: Text(subtitulo),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -322,10 +560,25 @@ class _EstadoRow extends StatelessWidget {
                 style: TextStyle(color: _color, fontWeight: FontWeight.w600, fontSize: 11)),
           ),
           PopupMenuButton<String>(
-            onSelected: (nuevoEstado) => onCambiarEstado(estado, nuevoEstado),
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'pagado', child: Text('Marcar pagado')),
-              PopupMenuItem(value: 'exonerado', child: Text('Exonerar')),
+            onSelected: (valor) {
+              if (valor == 'bloquear') {
+                onBloquear?.call(estado);
+              } else if (valor == 'desbloquear') {
+                onDesbloquear?.call(estado);
+              } else {
+                onCambiarEstado(estado, valor);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'pagado', child: Text('Marcar pagado')),
+              const PopupMenuItem(value: 'exonerado', child: Text('Exonerar')),
+              if (esDueno) ...[
+                const PopupMenuDivider(),
+                if (bloqueadoPorCuenta)
+                  const PopupMenuItem(value: 'desbloquear', child: Text('Desbloquear cuenta'))
+                else
+                  const PopupMenuItem(value: 'bloquear', child: Text('Bloquear cuenta')),
+              ],
             ],
           ),
         ],
@@ -414,6 +667,125 @@ class _FormularioEditarMontoState extends State<_FormularioEditarMonto> {
                 ? const SizedBox(
                     height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Motivo + duración elegidos en [_FormularioBloqueo].
+class _ResultadoBloqueo {
+  final String motivo;
+  final DateTime? hasta; // null = bloqueo permanente
+  _ResultadoBloqueo({required this.motivo, this.hasta});
+}
+
+/// Formulario compartido para bloquear una cuenta, una parada, o una
+/// organización entera -- el mismo motivo y la misma elección de
+/// temporal/permanente sirven para los 3 casos (pedido de Elias
+/// 2026-09-07).
+class _FormularioBloqueo extends StatefulWidget {
+  final String titulo;
+  const _FormularioBloqueo({required this.titulo});
+
+  @override
+  State<_FormularioBloqueo> createState() => _FormularioBloqueoState();
+}
+
+class _FormularioBloqueoState extends State<_FormularioBloqueo> {
+  final _motivoController = TextEditingController();
+  final _diasController = TextEditingController(text: '30');
+  bool _permanente = true;
+
+  @override
+  void dispose() {
+    _motivoController.dispose();
+    _diasController.dispose();
+    super.dispose();
+  }
+
+  void _confirmar() {
+    DateTime? hasta;
+    if (!_permanente) {
+      final dias = int.tryParse(_diasController.text) ?? 30;
+      hasta = DateTime.now().add(Duration(days: dias < 1 ? 1 : dias));
+    }
+    final motivo = _motivoController.text.trim();
+    Navigator.of(context).pop(
+      _ResultadoBloqueo(motivo: motivo.isEmpty ? 'Falta de pago de la cuota de plataforma' : motivo, hasta: hasta),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(widget.titulo, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            'No va a poder iniciar sesión ni su carnet/QR va a validar mientras dure el bloqueo.',
+            style:
+                Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _motivoController,
+            decoration: const InputDecoration(
+              labelText: 'Motivo (opcional)',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: RadioListTile<bool>(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Permanente'),
+                  value: true,
+                  groupValue: _permanente,
+                  onChanged: (v) => setState(() => _permanente = v ?? true),
+                ),
+              ),
+              Expanded(
+                child: RadioListTile<bool>(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Temporal'),
+                  value: false,
+                  groupValue: _permanente,
+                  onChanged: (v) => setState(() => _permanente = v ?? false),
+                ),
+              ),
+            ],
+          ),
+          if (!_permanente)
+            TextField(
+              controller: _diasController,
+              decoration: const InputDecoration(
+                labelText: 'Días',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: _confirmar,
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.estadoUrgente),
+            child: const Text('Bloquear'),
           ),
         ],
       ),

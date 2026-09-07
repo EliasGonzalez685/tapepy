@@ -81,6 +81,7 @@ class CuotaPlataformaItem {
 class EstadoCuotaPlataforma {
   final String usuarioId;
   final String? nombre;
+  final String? cedula;
   final String? rol;
   final String? paradaId;
   final String? paradaNombre;
@@ -90,12 +91,24 @@ class EstadoCuotaPlataforma {
   final String? metodoPago;
   final String? comprobanteUrl;
   final String? cuotaId;
+  // Bloqueo manual del dueño de plataforma por falta de pago (pedido de
+  // Elias 2026-09-07) -- distinto del bloqueo por intentos fallidos de
+  // login. bloqueoManualHasta null con bloqueoManual true = permanente.
+  final bool bloqueoManual;
+  final DateTime? bloqueoManualHasta;
+  final String? bloqueoManualMotivo;
+  // Si la parada de esta persona está bloqueada (afecta a todos sus
+  // miembros por igual, no solo a esta fila).
+  final bool paradaBloqueada;
+  final DateTime? paradaBloqueadaHasta;
+  final String? paradaBloqueadaMotivo;
 
   EstadoCuotaPlataforma({
     required this.usuarioId,
     required this.estado,
     required this.monto,
     this.nombre,
+    this.cedula,
     this.rol,
     this.paradaId,
     this.paradaNombre,
@@ -103,15 +116,28 @@ class EstadoCuotaPlataforma {
     this.metodoPago,
     this.comprobanteUrl,
     this.cuotaId,
+    this.bloqueoManual = false,
+    this.bloqueoManualHasta,
+    this.bloqueoManualMotivo,
+    this.paradaBloqueada = false,
+    this.paradaBloqueadaHasta,
+    this.paradaBloqueadaMotivo,
   });
 
   bool get enDeuda => estado == 'moroso';
   bool get alDia => estado == 'pagado' || estado == 'exonerado';
 
+  bool get bloqueoManualVigente =>
+      bloqueoManual && (bloqueoManualHasta == null || bloqueoManualHasta!.isAfter(DateTime.now()));
+  bool get paradaBloqueadaVigente =>
+      paradaBloqueada && (paradaBloqueadaHasta == null || paradaBloqueadaHasta!.isAfter(DateTime.now()));
+  bool get bloqueadoEfectivo => bloqueoManualVigente || paradaBloqueadaVigente;
+
   factory EstadoCuotaPlataforma.fromMap(Map<String, dynamic> map) {
     return EstadoCuotaPlataforma(
       usuarioId: map['usuario_id'] as String,
       nombre: map['nombre'] as String?,
+      cedula: map['cedula'] as String?,
       rol: map['rol'] as String?,
       paradaId: map['parada_id'] as String?,
       paradaNombre: map['parada_nombre'] as String?,
@@ -121,6 +147,35 @@ class EstadoCuotaPlataforma {
       metodoPago: map['metodo_pago'] as String?,
       comprobanteUrl: map['comprobante_url'] as String?,
       cuotaId: map['cuota_id'] as String?,
+      bloqueoManual: map['bloqueo_manual'] as bool? ?? false,
+      bloqueoManualHasta:
+          map['bloqueo_manual_hasta'] != null ? DateTime.parse(map['bloqueo_manual_hasta'] as String) : null,
+      bloqueoManualMotivo: map['bloqueo_manual_motivo'] as String?,
+      paradaBloqueada: map['parada_bloqueada'] as bool? ?? false,
+      paradaBloqueadaHasta: map['parada_bloqueada_hasta'] != null
+          ? DateTime.parse(map['parada_bloqueada_hasta'] as String)
+          : null,
+      paradaBloqueadaMotivo: map['parada_bloqueada_motivo'] as String?,
+    );
+  }
+}
+
+/// Estado de bloqueo de una organización completa (ver
+/// [CuotaPlataformaService.obtenerEstadoBloqueoOrganizacion]).
+class EstadoBloqueoOrganizacion {
+  final bool bloqueada;
+  final DateTime? hasta;
+  final String? motivo;
+
+  EstadoBloqueoOrganizacion({required this.bloqueada, this.hasta, this.motivo});
+
+  bool get vigente => bloqueada && (hasta == null || hasta!.isAfter(DateTime.now()));
+
+  factory EstadoBloqueoOrganizacion.fromMap(Map<String, dynamic> map) {
+    return EstadoBloqueoOrganizacion(
+      bloqueada: map['bloqueada'] as bool? ?? false,
+      hasta: map['bloqueada_hasta'] != null ? DateTime.parse(map['bloqueada_hasta'] as String) : null,
+      motivo: map['bloqueada_motivo'] as String?,
     );
   }
 }
@@ -307,6 +362,105 @@ class CuotaPlataformaService {
   /// organización -- reemplaza el viejo "Generar cobro del mes".
   Future<void> editarMonto({required String organizacionId, required double monto}) async {
     await _client.from('organizaciones').update({'cuota_plataforma_monto': monto}).eq('id', organizacionId);
+  }
+
+  // ---------------------------------------------------------------------
+  // Bloqueo manual por falta de pago (pedido de Elias 2026-09-07): el
+  // dueño de plataforma puede bloquear una cuenta puntual, toda una
+  // parada, o toda una organización -- temporal (con fecha de
+  // reactivación) o permanente (bloqueoHasta null). Todas estas
+  // escrituras son de solo-dueño: el trigger de blindaje en la base
+  // (usuarios_proteger_columnas_sensibles / paradas_proteger_bloqueo)
+  // revierte el cambio si lo intenta cualquier otro rol, y
+  // organizaciones ya está restringida a dueño en su política de
+  // escritura -- así que un simple .update() alcanza, sin necesitar
+  // una RPC aparte (mismo patrón que CuentasBloqueadasService).
+
+  Future<void> bloquearUsuario({
+    required String usuarioId,
+    required String motivo,
+    required String bloqueadoPor,
+    DateTime? hasta,
+  }) async {
+    await _client.from('usuarios').update({
+      'bloqueo_manual': true,
+      'bloqueo_manual_hasta': hasta?.toIso8601String(),
+      'bloqueo_manual_motivo': motivo,
+      'bloqueo_manual_por': bloqueadoPor,
+      'bloqueo_manual_en': DateTime.now().toIso8601String(),
+    }).eq('id', usuarioId);
+  }
+
+  Future<void> desbloquearUsuario(String usuarioId) async {
+    await _client.from('usuarios').update({
+      'bloqueo_manual': false,
+      'bloqueo_manual_hasta': null,
+      'bloqueo_manual_motivo': null,
+      'bloqueo_manual_por': null,
+      'bloqueo_manual_en': null,
+    }).eq('id', usuarioId);
+  }
+
+  Future<void> bloquearParada({
+    required String paradaId,
+    required String motivo,
+    required String bloqueadoPor,
+    DateTime? hasta,
+  }) async {
+    await _client.from('paradas').update({
+      'bloqueada': true,
+      'bloqueada_hasta': hasta?.toIso8601String(),
+      'bloqueada_motivo': motivo,
+      'bloqueada_por': bloqueadoPor,
+      'bloqueada_en': DateTime.now().toIso8601String(),
+    }).eq('id', paradaId);
+  }
+
+  Future<void> desbloquearParada(String paradaId) async {
+    await _client.from('paradas').update({
+      'bloqueada': false,
+      'bloqueada_hasta': null,
+      'bloqueada_motivo': null,
+      'bloqueada_por': null,
+      'bloqueada_en': null,
+    }).eq('id', paradaId);
+  }
+
+  Future<void> bloquearOrganizacion({
+    required String organizacionId,
+    required String motivo,
+    required String bloqueadoPor,
+    DateTime? hasta,
+  }) async {
+    await _client.from('organizaciones').update({
+      'bloqueada': true,
+      'bloqueada_hasta': hasta?.toIso8601String(),
+      'bloqueada_motivo': motivo,
+      'bloqueada_por': bloqueadoPor,
+      'bloqueada_en': DateTime.now().toIso8601String(),
+    }).eq('id', organizacionId);
+  }
+
+  Future<void> desbloquearOrganizacion(String organizacionId) async {
+    await _client.from('organizaciones').update({
+      'bloqueada': false,
+      'bloqueada_hasta': null,
+      'bloqueada_motivo': null,
+      'bloqueada_por': null,
+      'bloqueada_en': null,
+    }).eq('id', organizacionId);
+  }
+
+  /// Estado de bloqueo de la organización en sí (no de sus miembros) --
+  /// para mostrar un aviso persistente en la pantalla cuando está
+  /// bloqueada, y prellenar el botón de bloquear/desbloquear.
+  Future<EstadoBloqueoOrganizacion> obtenerEstadoBloqueoOrganizacion(String organizacionId) async {
+    final row = await _client
+        .from('organizaciones')
+        .select('bloqueada, bloqueada_hasta, bloqueada_motivo')
+        .eq('id', organizacionId)
+        .single();
+    return EstadoBloqueoOrganizacion.fromMap(row as Map<String, dynamic>);
   }
 
   /// Estado del mes en curso de TODOS los miembros pagadores de una

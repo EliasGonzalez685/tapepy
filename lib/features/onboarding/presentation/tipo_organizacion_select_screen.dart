@@ -18,7 +18,7 @@ class TipoOrganizacionSelectScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('¿Qué tipo de servicio buscás?')),
+      appBar: AppBar(title: const Text('Organizaciones disponibles')),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(

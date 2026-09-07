@@ -118,14 +118,30 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: Icon(Icons.close,
                                 size: 20, color: Colors.grey),
                           ),
-                          ClipOval(
-                            child: Image.asset(
-                              organizacion.logoAsset,
-                              width: 100,
-                              height: 100,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
+                          organizacion.logoAsset != null
+                              ? ClipOval(
+                                  child: Image.asset(
+                                    organizacion.logoAsset!,
+                                    width: 100,
+                                    height: 100,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              // Todavía no tiene logo cargado (organización
+                              // recién dada de alta) -- se muestra la
+                              // inicial en vez de una imagen placeholder.
+                              : CircleAvatar(
+                                  radius: 50,
+                                  backgroundColor: colorAcento,
+                                  child: Text(
+                                    organizacion.inicial,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 36,
+                                    ),
+                                  ),
+                                ),
                         ],
                       ],
                     ),

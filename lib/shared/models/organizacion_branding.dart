@@ -11,7 +11,11 @@ class OrganizacionBranding {
   final String nombre;
   final String nombreCompleto;
   final String tagline;
-  final String logoAsset;
+  // Ruta del asset del logo -- null si la organización todavía no tiene
+  // uno cargado (por ejemplo, recién dada de alta por autoservicio vía
+  // solicitudes_organizacion). En ese caso la UI muestra solo el
+  // nombre/inicial en vez de una imagen placeholder.
+  final String? logoAsset;
   final Color colorPrimario;
   // Subtítulo chico opcional para el dorso del carnet (rubro de
   // servicios) — null si la organización no cargó uno.
@@ -42,7 +46,7 @@ class OrganizacionBranding {
     required this.nombre,
     required this.nombreCompleto,
     required this.tagline,
-    required this.logoAsset,
+    this.logoAsset,
     required this.colorPrimario,
     this.carnetSubtitulo,
     this.mostrarBanderasFrontera = false,
@@ -58,7 +62,7 @@ class OrganizacionBranding {
       nombre: map['nombre'] as String,
       nombreCompleto: map['nombre_completo'] as String,
       tagline: map['tagline'] as String,
-      logoAsset: map['logo_asset'] as String,
+      logoAsset: map['logo_asset'] as String?,
       colorPrimario: _colorDesdeHex(map['color_primario'] as String),
       carnetSubtitulo: map['carnet_subtitulo'] as String?,
       mostrarBanderasFrontera: map['mostrar_banderas_frontera'] as bool? ?? false,
@@ -73,4 +77,9 @@ class OrganizacionBranding {
     final limpio = hex.replaceFirst('#', '');
     return Color(int.parse('FF$limpio', radix: 16));
   }
+
+  // Inicial del nombre, para mostrar en vez del logo cuando logoAsset
+  // es null (organización recién dada de alta, sin logo todavía).
+  String get inicial =>
+      nombre.trim().isNotEmpty ? nombre.trim()[0].toUpperCase() : '?';
 }

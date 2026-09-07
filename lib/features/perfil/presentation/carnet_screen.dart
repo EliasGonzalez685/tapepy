@@ -293,21 +293,26 @@ class _EncabezadoOrganizacion extends StatelessWidget {
                     Expanded(child: Container(color: _azulInstitucional)),
                   ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 14),
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                    child: ClipOval(
-                      child: Image(
-                        image: AssetImage(organizacion.logoAsset),
-                        width: 24,
-                        height: 24,
-                        fit: BoxFit.cover,
+                // Sin logo cargado todavía (organización recién dada de
+                // alta) se omite el círculo por completo, en vez de
+                // mostrar una imagen placeholder -- queda solo la franja
+                // bandera y el nombre de arriba.
+                if (organizacion.logoAsset != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 14),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                      child: ClipOval(
+                        child: Image(
+                          image: AssetImage(organizacion.logoAsset!),
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -571,8 +576,14 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
     marginAll: _pageMarginMm * PdfPageFormat.mm,
   );
 
-  final logoBytes = (await rootBundle.load(organizacion.logoAsset)).buffer.asUint8List();
-  final logoImage = pw.MemoryImage(logoBytes);
+  // Sin logo cargado todavía (organización recién dada de alta) se deja
+  // logoImage en null y el membrete omite el círculo por completo, en
+  // vez de mostrar una imagen placeholder.
+  pw.MemoryImage? logoImage;
+  if (organizacion.logoAsset != null) {
+    final logoBytes = (await rootBundle.load(organizacion.logoAsset!)).buffer.asUint8List();
+    logoImage = pw.MemoryImage(logoBytes);
+  }
 
   pw.MemoryImage? fotoImage;
   if (datos.fotoPerfilUrl != null) {
@@ -616,21 +627,22 @@ Future<Uint8List> _generarPdf(CarnetData datos) async {
                       pw.Expanded(child: pw.Container(color: azul)),
                     ],
                   ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.only(left: 10),
-                    child: pw.Container(
-                      width: 20,
-                      height: 20,
-                      decoration: const pw.BoxDecoration(
-                          shape: pw.BoxShape.circle, color: PdfColors.white),
-                      padding: const pw.EdgeInsets.all(1),
-                      child: pw.ClipRRect(
-                        horizontalRadius: 10,
-                        verticalRadius: 10,
-                        child: pw.Image(logoImage, fit: pw.BoxFit.cover),
+                  if (logoImage != null)
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(left: 10),
+                      child: pw.Container(
+                        width: 20,
+                        height: 20,
+                        decoration: const pw.BoxDecoration(
+                            shape: pw.BoxShape.circle, color: PdfColors.white),
+                        padding: const pw.EdgeInsets.all(1),
+                        child: pw.ClipRRect(
+                          horizontalRadius: 10,
+                          verticalRadius: 10,
+                          child: pw.Image(logoImage, fit: pw.BoxFit.cover),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -744,8 +744,13 @@ Future<Uint8List> _construirPdf({
   final azul = PdfColor.fromHex('#1B3A8C');
   final formatoFecha = DateFormat('dd/MM/yyyy HH:mm');
 
-  final logoBytes = (await rootBundle.load(org.logoAsset)).buffer.asUint8List();
-  final logoImage = pw.MemoryImage(logoBytes);
+  // Sin logo cargado todavía (organización recién dada de alta) se
+  // omite el círculo del membrete, en vez de mostrar un placeholder.
+  pw.MemoryImage? logoImage;
+  if (org.logoAsset != null) {
+    final logoBytes = (await rootBundle.load(org.logoAsset!)).buffer.asUint8List();
+    logoImage = pw.MemoryImage(logoBytes);
+  }
 
   pw.Widget celda(String texto, {bool header = false, bool angosta = false, bool alta = false}) => pw.Padding(
         padding: pw.EdgeInsets.symmetric(horizontal: 6, vertical: alta ? 16 : 6),
@@ -832,17 +837,18 @@ Future<Uint8List> _construirPdf({
                   ],
                 ),
               ),
-              pw.Container(
-                width: 40,
-                height: 40,
-                decoration: const pw.BoxDecoration(shape: pw.BoxShape.circle, color: PdfColors.white),
-                padding: const pw.EdgeInsets.all(2),
-                child: pw.ClipRRect(
-                  horizontalRadius: 20,
-                  verticalRadius: 20,
-                  child: pw.Image(logoImage, fit: pw.BoxFit.cover),
+              if (logoImage != null)
+                pw.Container(
+                  width: 40,
+                  height: 40,
+                  decoration: const pw.BoxDecoration(shape: pw.BoxShape.circle, color: PdfColors.white),
+                  padding: const pw.EdgeInsets.all(2),
+                  child: pw.ClipRRect(
+                    horizontalRadius: 20,
+                    verticalRadius: 20,
+                    child: pw.Image(logoImage, fit: pw.BoxFit.cover),
+                  ),
                 ),
-              ),
             ],
           ),
           pw.SizedBox(height: 14),

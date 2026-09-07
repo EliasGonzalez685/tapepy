@@ -437,7 +437,13 @@ class _GreetingHeader extends StatelessWidget {
     final nombre = usuario?.nombre ?? 'Presidente';
     final inicial = nombre.trim().isNotEmpty ? nombre.trim()[0].toUpperCase() : 'P';
     final colorOrg = organizacion?.colorPrimario ?? AppTheme.rojoInstitucional;
-    final logoOrg = organizacion?.logoAsset ?? 'assets/images/traude_logo.png';
+    // Sin organización se usa el logo de Traude como fallback histórico;
+    // con organización pero sin logo propio todavía (recién dada de
+    // alta) no hay imagen que mostrar -- se muestra la inicial.
+    final logoOrg = organizacion == null
+        ? 'assets/images/traude_logo.png'
+        : organizacion.logoAsset;
+    final inicialOrg = organizacion?.inicial ?? inicial;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -463,11 +469,11 @@ class _GreetingHeader extends StatelessWidget {
               CircleAvatar(
                 radius: 26,
                 backgroundColor: Colors.white,
-                backgroundImage: AssetImage(logoOrg),
-                onBackgroundImageError: (_, __) {},
-                child: usuario == null
+                backgroundImage: logoOrg != null ? AssetImage(logoOrg) : null,
+                onBackgroundImageError: logoOrg != null ? (_, __) {} : null,
+                child: logoOrg == null
                     ? Text(
-                        inicial,
+                        inicialOrg,
                         style: TextStyle(
                           color: colorOrg,
                           fontWeight: FontWeight.bold,

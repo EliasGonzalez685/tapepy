@@ -127,14 +127,29 @@ class _OrganizacionCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              ClipOval(
-                child: Image.asset(
-                  organizacion.logoAsset,
-                  width: 56,
-                  height: 56,
-                  fit: BoxFit.cover,
-                ),
-              ),
+              organizacion.logoAsset != null
+                  ? ClipOval(
+                      child: Image.asset(
+                        organizacion.logoAsset!,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  // Sin logo todavía (organización recién dada de alta) --
+                  // se muestra la inicial en vez de un placeholder.
+                  : CircleAvatar(
+                      radius: 28,
+                      backgroundColor: organizacion.colorPrimario,
+                      child: Text(
+                        organizacion.inicial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
